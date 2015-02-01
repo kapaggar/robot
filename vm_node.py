@@ -26,17 +26,17 @@ class vm_node(object):
 		self._ip = config['HOSTS'][host][vm]['mgmt_ip']
 		self._mask = config['HOSTS'][host][vm]['mgmt_mask']
 		self._gw = config['HOSTS'][host][vm]['gw']
-		self._brMgmt = 'mgmt' #if not config['HOSTS'][host][vm]['brMgmt'] else config['HOSTS'][host][vm]['brMgmt']
+		self._brMgmt = config['HOSTS'][host]['brMgmt']
 		self._mgmtNic = "eth0"
 		self._mgmtMac = self.randomMAC()
 		self._stor_ip = config['HOSTS'][host][vm]['stor_ip']
 		self._stor_mask = config['HOSTS'][host][vm]['stor_mask']
 		self._storNic = "eth1"
 		self._storMac = self.randomMAC()
-		self._brStor = 'stor' #if not config['HOSTS'][host][vm]['brStor'] else config['HOSTS'][host][vm]['brStor']
+		self._brStor = config['HOSTS'][host]['brStor']
 		self._template = template
-		self._cpu = 4 #if not config['HOSTS'][host][vm]['cpus'] else config['HOSTS'][host][vm]['cpus']
-		self._memory = 16384 #if not config['HOSTS'][host][vm]['memory'] else config['HOSTS'][host][vm]['memory']
+		self._cpu = config['HOSTS'][host][vm]['cpus']
+		self._memory = config['HOSTS'][host][vm]['memory']
 		self._hostid=self.hostid_generator()
 		self._diskimageFull="/data/virt/pools/default/%s.img" % self._name
 		self._diskimage = "%s.img" % self._name
@@ -302,9 +302,9 @@ class vm_node(object):
 		cmd += "set hadoop_yarn nameservice %s \n"% self.config_ref['HOSTS']['yarn_nameservice']
 		
 		for node in self.journal_nodes:
-			cmd += "set hadoop_yarn slave %s \n"%self.config_ref['HOSTS'][self._host][node]['mgmt_ip']
+			cmd += "set hadoop_yarn slave %s \n"%self.nodes_ip[node]
 		for node in self.data_nodes:
-			cmd += "set hadoop_yarn slave %s \n"%self.config_ref['HOSTS'][self._host][node]['mgmt_ip']
+			cmd += "set hadoop_yarn slave %s \n"%self.nodes_ip[node]
 			
 		cmd += "set hadoop_yarn client %s \n"%self._clusterVIP
 		cmd += "set hadoop_yarn state UNINIT \n"

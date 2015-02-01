@@ -12,12 +12,16 @@ snmpsink_server = ip_addr
 ip = ip_addr
 username = string
 password = string
+brMgmt = string(default = mgmt)
+brStor = string(default = stor)
 
 [[[__many__]]]
 mgmt_ip = ip_addr
 mgmt_mask =  integer(min=8, max=32, default=24)
 gw = ip_addr
 stor_ip = ip_addr
+cpus =  integer(min=1, max=24, default=4)
+memory =  integer(min=8192, max=96000, default=16384)
 stor_mask = integer(min=8, max=32, default=24)
 enabled_users = string_list
 cluster_vip = ip_addr(default = None)

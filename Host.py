@@ -10,6 +10,7 @@ from validate import Validator
 from urlgrabber import urlopen
 from colorama import Fore
 from pprint import pprint
+import threading
 ######################################################
 ##            Class HOST
 ######################################################
@@ -148,66 +149,6 @@ class Host(object):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			print vm.power_on()
-		
-	def basic_settings(self):
-		for vm_name in self._vms:
-			print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			if vm.ssh_self():
-				print vm.factory_revert()
-				print vm.setSnmpServer()
-				print vm.config_ntp()
-				print vm.configusers()
-				print vm.setHostName()
-				print vm.setIpHostMaps()
-				print vm.setStorNw()
-				print vm.config_write()
-
-	def generate_keys(self):
-		for vm_name in self._vms:
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			if vm.ssh_self():
-				print vm.gen_dsakey()
-
-	def shareKeys(self):
-		for vm_name in self._vms:
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			print "Now sharing pub-keys inside VM %s"%vm_name
-			if vm.ssh_self():
-				print vm.removeAuthKeys()
-				print vm.authPubKeys()
-				print vm.config_write()
-
-	def setupClusters(self):
-		for vm_name in self._vms:
-			print "Now setting clusters inside VM %s"%vm_name
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			if vm.ssh_self():
-				if vm.is_clusternode():
-					print vm.setclustering()
-					time.sleep(5) # Let clustering settle down
-					print vm.config_write()
-				else:
-					print "nothing to do in %s" %vm_name
-
-	def setupStorage(self):
-		for vm_name in self._vms:
-			print(Fore.RED + "Now setting up storage inside VM %s"%vm_name + Fore.RESET) 
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			if vm.ssh_self():
-				if vm.has_storage():
-					print vm.bring_storage()
-					print vm.format_storage()
-					print vm.mount_storage()
-					print vm.config_write()
-
-	def setupHDFS(self):
-		for vm_name in self._vms:
-			print "Now setting up HDFS inside VM %s"%vm_name
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			if vm.is_namenode():
-				if vm.ssh_self():
-					print vm.setup_HDFS()
 
 if __name__ == '__main__':
 	def get_hosts(config):
@@ -216,10 +157,85 @@ if __name__ == '__main__':
 			if isinstance(config['HOSTS'][section], dict):
 				hosts.append(config['HOSTS'][section].name)
 		return hosts
+	def get_allvms(config):
+		tuples = []	
+		for host_section in config['HOSTS']:
+			if isinstance(config['HOSTS'][host_section], dict):
+				for vm_section in config['HOSTS'][host_section]:
+					if isinstance(config['HOSTS'][host_section][vm_section], dict):
+						tuples.append(host_section + ":" + vm_section)
+		return tuples
+
+	def basic_settings(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			if vm.ssh_self():
+				#print vm.factory_revert()
+				print vm.setSnmpServer()
+				print vm.config_ntp()
+				print vm.configusers()
+				print vm.setHostName()
+				print vm.setIpHostMaps()
+				print vm.setStorNw()
+				print vm.config_write()
+
+	def generate_keys(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			if vm.ssh_self():
+				print vm.gen_dsakey()
+
+	def shareKeys(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			print "Now sharing pub-keys inside VM %s"%vm_name
+			if vm.ssh_self():
+				print vm.removeAuthKeys()
+				print vm.authPubKeys()
+				print vm.config_write()
+
+	def setupClusters(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			print "Now setting clusters inside VM %s"%vm_name
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			if vm.ssh_self():
+				if vm.is_clusternode():
+					print vm.setclustering()
+					time.sleep(5) # Let clustering settle down
+					print vm.config_write()
+				else:
+					print "nothing to do in %s" %vm_name
+
+	def setupStorage(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			print(Fore.RED + "Now setting up storage inside VM %s"%vm_name + Fore.RESET) 
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			if vm.ssh_self():
+				if vm.has_storage():
+					print vm.bring_storage()
+					print vm.format_storage()
+					print vm.mount_storage()
+					print vm.config_write()
+
+	def setupHDFS(tuples):
+		for line in tuples:
+			host,vm_name = line.split(":")
+			print "Now setting up HDFS inside VM %s"%vm_name
+			vm = config['HOSTS'][host][vm_name]['vm_ref']
+			if vm.is_namenode():
+				if vm.ssh_self():
+					print vm.setup_HDFS()
+
 	########################################################
 	#     MAIN
 	########################################################
-	config_filename = 'FIVE.ini'
+	config_filename = 'setup.ini'
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
@@ -238,30 +254,38 @@ if __name__ == '__main__':
 
 
 	hosts = get_hosts(config)
-	
+	start_time = time.time()
 	#TODO all the below in threads synchronizing after each func.
+
 	for host_name in hosts:
 		host = Host(config,host_name)
-
 		host.connectSSH()
-		#host.enableVirt()
+		host.enableVirt()
 		host.synctime()
-		#host.setDNS()
-		#host.getMfgCd()
-		#host.delete_template()
-		#host.create_template()
+		host.setDNS()
+		host.getMfgCd()
+		host.delete_template()
+		host.create_template()
 		host.deleteVMs()
 		host.declareVMs()
 		host.instantiateVMs()
 		host.startVMs()
-		time.sleep(120) # this is time we wait for vms to come up
-		host.basic_settings()
-		host.generate_keys()
-		host.shareKeys()
-		host.setupClusters()
-		host.setupStorage()
-		host.setupHDFS()
-
+	
+	allvms = get_allvms(config)
+	
+	for line in allvms:
+		host,vm_name = line.split(":")
+		vm = vm_node(config,host,vm_name)
+		config['HOSTS'][host][vm_name]['vm_ref'] = vm
+		
+	basic_settings(allvms)
+	generate_keys(allvms)
+	shareKeys(allvms)
+	setupClusters(allvms)
+	setupStorage(allvms)
+	setupHDFS(allvms)
+	runtime = time.time() - start_time
+	print Fore.BLUE + 'Runtime:', datetime.timedelta(seconds=runtime) + Fore.RESET
 #TODO: ROOT_2 ignore install
 #TODO: force format iscsi
 #TODO : iso auto pick name
