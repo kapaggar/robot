@@ -53,6 +53,7 @@ class vm_node(object):
 		self._tps_fs = config['HOSTS'][host][vm]['tps-fs']
 		self._release_ver = config['HOSTS']['release_ver']
 		self._cluster_name = config['HOSTS'][host][vm]['cluster_name']
+		self._upgrade_img = config['HOSTS']['upgrade_img']
 		self.nodes_ip[vm] = config['HOSTS'][host][vm]['mgmt_ip']
 		self.config_ref = config
 		if self._namenode:
@@ -430,6 +431,24 @@ class vm_node(object):
 		output =  session.executeCli('cluster master self')
 		return output 
 
+	def image_fetch(self):
+		output = ''
+		output += self._ssh_session.executeCli('image fetch %s'%self._upgrade_img)
+		return output
+	
+	def image_install(self):
+		output = ''
+		image_name = self._upgrade_img.split("/")[-1]
+		output += self._ssh_session.executeCli('image install %s'%self._upgrade_img)
+		#TODO check error
+		output += self._ssh_session.executeCli('image boot next')
+		return output
+
+	def reload(self):
+		output = ''
+		output += self._ssh_session.executeCli('config write')
+		output += self._ssh_session.executeCli('reload')
+		return output
 
 if __name__ == '__main__':
 	pass

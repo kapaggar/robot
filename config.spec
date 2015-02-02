@@ -1,5 +1,6 @@
 [HOSTS]
 iso_path = string(default=nightly)
+upgrade_img = string(default=None)
 nightly_dir = string(default=http://kite.ggn.in.guavus.com/snoopy/work/platform-master/output/product-guavus-x86_64/release/mfgcd)
 name_server = ip_addr(default = 103.14.2.35)
 release_ver = string(default = nightly)

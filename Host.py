@@ -30,8 +30,7 @@ class Host(object):
 		self._release_ver = self.config['HOSTS']['release_ver']
 		self._vms = self.get_vms()
 		self._ssh_session = None
-		
-	
+
 	def connectSSH(self):
 		self._ssh_session = session(self._ip, self._username, self._password)
 		self.config['HOSTS'][self._name]['ssh_session'] = self._ssh_session
@@ -69,10 +68,10 @@ class Host(object):
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
 		output += self._ssh_session.executeCli('ntp enable ')
 		return output
-	
+
 	def setDNS(self):
 		return self._ssh_session.executeCli('ip name-server %s '%self._name_server)
-	
+
 	def create_template(self,template_img='/data/virt/pools/default/template.img'):
 		output = ''
 		iso_path = self.get_iso_path()
@@ -88,7 +87,7 @@ class Host(object):
 		output +=  self._ssh_session.run_till_prompt('/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda',"my_PROMPT",wait=60)
 		output +=  self._ssh_session.run_till_prompt('reboot')
 		return output
-	
+
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
 			nightly_base_dir = self.config['HOSTS']['nightly_dir']
@@ -96,7 +95,7 @@ class Host(object):
 			return full_iso_path
 		elif self._iso_path is not None:
 			return self._iso_path
-	
+
 	def get_nightly(self,base_path):
 		re_mfgiso = re.compile( r"(?P<mfgiso>mfgcd-\S+?.iso)",re.M)
 		page = urlopen(base_path)
@@ -149,6 +148,15 @@ class Host(object):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			print vm.power_on()
+
+	def upgradeVMs(self):
+		for vm_name in self._vms:
+			vm = vm_node(self.config,self._name,vm_name)
+			print vm.image_fetch()
+			print vm.image_install()
+			print vm.reload()
+	
+		
 	
 if __name__ == '__main__':
 	def get_hosts(config):
@@ -255,42 +263,58 @@ if __name__ == '__main__':
 	
 	
 	hosts = get_hosts(config)
+	install_type = config['HOSTS']['install_type']
 	start_time = time.time()
-	#TODO all the below in threads synchronizing after each func.
 	
+	#TODO Method Extraction
+	
+	#Setup Hosts Connectivity 
 	for host_name in hosts:
 		host = Host(config,host_name)
 		host.connectSSH()
-		host.enableVirt()
-		host.synctime()
-		host.setDNS()
-		host.getMfgCd()
-		host.delete_template()
-		host.create_template()
-		host.deleteVMs()
-		host.declareVMs()
-		host.instantiateVMs()
-		host.startVMs()
-		
-	allvms = get_allvms(config)
-	
-	for line in allvms:
-		host,vm_name = line.split(":")
-		vm = vm_node(config,host,vm_name)
-		config['HOSTS'][host][vm_name]['vm_ref'] = vm	
 			
-	basic_settings(allvms)
-	generate_keys(allvms)
-	shareKeys(allvms)
-	setupClusters(allvms)
-	setupStorage(allvms)
-	setupHDFS(allvms)
-	runtime = time.time() - start_time
-	print Fore.BLUE + 'Runtime:' + str(datetime.timedelta(seconds=runtime)) + Fore.RESET
+			
+	if install_type.find('manufacture'):
+		for host_name in hosts:
+			host = config['HOSTS'][host_name]['ssh_session']
+			host.enableVirt()
+			host.synctime()
+			host.setDNS()
+			host.getMfgCd()
+			host.delete_template()
+			host.create_template()
+			host.deleteVMs()
+			host.declareVMs()
+			host.instantiateVMs()
+			host.startVMs()
+		allvms = get_allvms(config)
+		for line in allvms:
+			host,vm_name = line.split(":")
+			vm = vm_node(config,host,vm_name)
+			config['HOSTS'][host][vm_name]['vm_ref'] = vm
+		basic_settings(allvms)
+		generate_keys(allvms)
+		shareKeys(allvms)
+		setupClusters(allvms)
+		setupStorage(allvms)
+		setupHDFS(allvms)	
+		manuf_runtime = time.time() - start_time
+		print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
+		
+	# TODO Method Extraction
+	thread = []
 	
-	
+	if install_type.find('upgrade'):
+		for host_name in hosts:
+			host = Host(config,host_name)
+			print host.upgradeVMs()
+
+
+	total_runtime = time.time() - start_time
+	print Fore.BLUE + 'Total Runtime:' + str(datetime.timedelta(seconds=total_runtime)) + Fore.RESET
+			
 	#TODO: ROOT_2 ignore install
-	#TODO: force format iscsi
+	#TODO: optional / force format iscsi
 	
 	
 
