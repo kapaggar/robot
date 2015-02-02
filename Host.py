@@ -31,12 +31,12 @@ class Host(object):
 		self._vms = self.get_vms()
 		self._ssh_session = None
 		
-
+	
 	def connectSSH(self):
 		self._ssh_session = session(self._ip, self._username, self._password)
 		self.config['HOSTS'][self._name]['ssh_session'] = self._ssh_session
 		return self._ssh_session
-
+	
 	def enableVirt(self):
 		output = ''
 		output += self._ssh_session.executeCli('virt enable')
@@ -96,7 +96,7 @@ class Host(object):
 			return full_iso_path
 		elif self._iso_path is not None:
 			return self._iso_path
-
+	
 	def get_nightly(self,base_path):
 		re_mfgiso = re.compile( r"(?P<mfgiso>mfgcd-\S+?.iso)",re.M)
 		page = urlopen(base_path)
@@ -126,30 +126,30 @@ class Host(object):
 			if isinstance(self.config['HOSTS'][self._name][section], dict):
 				vms.append(section)
 		return vms
-
+	
 	def deleteVMs(self):
 		output = ''
 		for vm_name in self._vms:
 			output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
 		return output
-
+	
 	def declareVMs(self):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
-
+	
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
 			print vm.set_storage()
 			print vm.configure()
 			print vm.set_mfgdb()
-
+	
 	def startVMs(self):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			print vm.power_on()
-
+	
 if __name__ == '__main__':
 	def get_hosts(config):
 		hosts = []	
@@ -165,29 +165,30 @@ if __name__ == '__main__':
 					if isinstance(config['HOSTS'][host_section][vm_section], dict):
 						tuples.append(host_section + ":" + vm_section)
 		return tuples
-
+	
 	def basic_settings(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
 			print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
 			vm = config['HOSTS'][host][vm_name]['vm_ref']
 			if vm.ssh_self():
-				#print vm.factory_revert()
+				print vm.factory_revert()
 				print vm.setSnmpServer()
+				print vm.config_dns()
 				print vm.config_ntp()
 				print vm.configusers()
 				print vm.setHostName()
 				print vm.setIpHostMaps()
 				print vm.setStorNw()
 				print vm.config_write()
-
+	
 	def generate_keys(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
 			vm = config['HOSTS'][host][vm_name]['vm_ref']
 			if vm.ssh_self():
 				print vm.gen_dsakey()
-
+	
 	def shareKeys(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
@@ -197,7 +198,7 @@ if __name__ == '__main__':
 				print vm.removeAuthKeys()
 				print vm.authPubKeys()
 				print vm.config_write()
-
+	
 	def setupClusters(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
@@ -210,7 +211,7 @@ if __name__ == '__main__':
 					print vm.config_write()
 				else:
 					print "nothing to do in %s" %vm_name
-
+	
 	def setupStorage(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
@@ -222,7 +223,7 @@ if __name__ == '__main__':
 					print vm.format_storage()
 					print vm.mount_storage()
 					print vm.config_write()
-
+	
 	def setupHDFS(tuples):
 		for line in tuples:
 			host,vm_name = line.split(":")
@@ -231,11 +232,11 @@ if __name__ == '__main__':
 			if vm.is_namenode():
 				if vm.ssh_self():
 					print vm.setup_HDFS()
-
+	
 	########################################################
 	#     MAIN
 	########################################################
-	config_filename = 'setup.ini'
+	config_filename = 'FIVE.ini'
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
@@ -251,12 +252,12 @@ if __name__ == '__main__':
 				print 'The following section was missing:%s ' % ', '.join(section_list)     
 		print 'Config file %s validation failed!'% config_filename
 		sys.exit(1)
-
-
+	
+	
 	hosts = get_hosts(config)
 	start_time = time.time()
 	#TODO all the below in threads synchronizing after each func.
-
+	
 	for host_name in hosts:
 		host = Host(config,host_name)
 		host.connectSSH()
@@ -270,14 +271,14 @@ if __name__ == '__main__':
 		host.declareVMs()
 		host.instantiateVMs()
 		host.startVMs()
-	
+		
 	allvms = get_allvms(config)
 	
 	for line in allvms:
 		host,vm_name = line.split(":")
 		vm = vm_node(config,host,vm_name)
-		config['HOSTS'][host][vm_name]['vm_ref'] = vm
-		
+		config['HOSTS'][host][vm_name]['vm_ref'] = vm	
+			
 	basic_settings(allvms)
 	generate_keys(allvms)
 	shareKeys(allvms)
@@ -285,11 +286,11 @@ if __name__ == '__main__':
 	setupStorage(allvms)
 	setupHDFS(allvms)
 	runtime = time.time() - start_time
-	print Fore.BLUE + 'Runtime:', datetime.timedelta(seconds=runtime) + Fore.RESET
-#TODO: ROOT_2 ignore install
-#TODO: force format iscsi
-#TODO : iso auto pick name
-#TODO : losetp config partition offset
-
-
+	print Fore.BLUE + 'Runtime:' + str(datetime.timedelta(seconds=runtime)) + Fore.RESET
+	
+	
+	#TODO: ROOT_2 ignore install
+	#TODO: force format iscsi
+	
+	
 

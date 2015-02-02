@@ -43,6 +43,7 @@ class vm_node(object):
 		self._enabledusers = config['HOSTS'][host][vm]['enabled_users']
 		self._dsakey = None
 		self._ntpserver = config['HOSTS']['ntp_server']
+		self._name_server = config['HOSTS']['name_server']
 		self._snmpsink = config['HOSTS']['snmpsink_server']
 		self._clusterVIP = config['HOSTS'][host][vm]['cluster_vip']
 		self._namenode = config['HOSTS'][host][vm]['name_node']
@@ -93,8 +94,22 @@ class vm_node(object):
 
 	def set_mfgdb(self):
 		output = ''
+		var_offset = None
+		re_varoffset = re.compile( r"^\S+\.img8\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
+		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' %self._diskimageFull)
+		try:
+			match = re_varoffset.search(layout_template)
+			if match:
+				var_offset = match.group("varOffset")
+			else:
+				return False
+		except Exception:
+			print ("error matching varOffset in %s" %self._diskimageFull)
+			return False
+		offset_bytes = int(var_offset) * 512
+			
 		output += self._host_ssh_session.executeCli('_exec /sbin/losetup -d /dev/loop0')
-		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup /dev/loop0 %s -o 39059177984 ' % self._diskimageFull) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
+		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup /dev/loop0 %s -o %s ' % (self._diskimageFull,offset_bytes)) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
 		output +=  self._host_ssh_session.executeCli('_exec mount /dev/loop0 /mnt/cdrom/')
 		#TODO make a config.dir backp
 		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
@@ -188,7 +203,13 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntpserver)
 		output += self._ssh_session.executeCli('ntp enable ')
 		return output
-		
+
+	def config_dns(self):
+		output = ''
+		output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
+		return output
+
+
 	def set_user(self,user,password='admin@123'):
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
