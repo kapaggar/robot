@@ -38,7 +38,7 @@ class session(object):
 		self.current_send_string = ''
 		if host and username and password:
 			self.connect()
-			self.checkPrompts()
+			#self.checkPrompts()
 	@property
 
 	def username(self):
@@ -66,9 +66,9 @@ class session(object):
 	
 	def getLoginPrompt(self,line):
 		try:
-			m1 = re.search("^(?P<loginPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+\>)\s*",line.strip(),re.MULTILINE)
+			m1 = re.search("^(?P<loginPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",line.strip(),re.MULTILINE)
 			if m1:
-				enPrompt = m1.group("loginPrompt")
+				loginPrompt = m1.group("loginPrompt")
 				return loginPrompt
 			else:
 				return False
@@ -120,7 +120,7 @@ class session(object):
 				return "cli"
 			elif self.getenPrompt(line):
 				return "en"
-			elif self.getshellPrompt(line):
+			elif self.getLoginPrompt(line):
 				return "login"
 			elif line.find("pm extension>")!= -1:
 				return "pmx"
@@ -173,6 +173,13 @@ class session(object):
 			self.run_till_prompt("quit",self.re_pmxPrompt,wait=1)
 			self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			output = self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+		elif prompt == "login":
+			self.run_till_prompt("en", self.re_enPrompt,wait=1)
+			self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
+			output = self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			return output
+		print "Was not able to run command #Todo Raise exception"
+			
 
 
 	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
@@ -196,7 +203,11 @@ class session(object):
 					 output += data
 			#debug
 			#print lastline
-			lastline =  data.splitlines()[-1]
+			lines =  data.splitlines()
+			if len(lines) > 0 :
+				lastline = lines[-1]
+			else:
+				return "Client Disconnected" #May be shell exited abruptly
 			if isinstance(prompt,re._pattern_type):
 				if prompt.match(lastline):
 					output = re.sub(prompt,'',output)
@@ -276,4 +287,6 @@ class session(object):
 
 
 if __name__ == '__main__':
-	ssh_session = session('192.168.172.191', 'admin', 'admin@123')
+	ssh_session = session('192.168.173.211', username='admin', password='admin@123')
+	prompt = ssh_session.getPrompt()
+	

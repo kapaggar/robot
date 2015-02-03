@@ -186,7 +186,13 @@ class vm_node(object):
 					time.sleep(10)
 					timeOut = timeOut - 10        
 			if vm_up :
-				self._ssh_session = session(host=self._ip, username='admin', password='admin@123')
+				#Find out admin user pass ( if not in config set default)
+				#username = 'admin'
+				#password = 'admin@123'
+				#for cred in self._enabledusers:
+				#	username,password = cred.split(":")
+				#	if username.find('admin'):
+				self._ssh_session = session(host=self._ip, username="admin" , password="admin@123")
 				return self._ssh_session
 			else :
 				print "Should return exception that SSH connection can;t be made to the VM"  
@@ -355,9 +361,8 @@ class vm_node(object):
 		for fs_name in self._tps_fs.keys():
 			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
 		return output
-	
-		
-	
+
+
 	def format_storage(self):
 		output = ''
 		for fs_name in self._tps_fs.keys():
@@ -439,7 +444,7 @@ class vm_node(object):
 	def image_install(self):
 		output = ''
 		image_name = self._upgrade_img.split("/")[-1]
-		output += self._ssh_session.executeCli('image install %s'%self._upgrade_img)
+		output += self._ssh_session.executeCli('image install %s'%image_name)
 		#TODO check error
 		output += self._ssh_session.executeCli('image boot next')
 		return output
@@ -450,5 +455,9 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('reload')
 		return output
 
+	def install_license(self):
+		output = ''
+		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
+		return output
 if __name__ == '__main__':
 	pass

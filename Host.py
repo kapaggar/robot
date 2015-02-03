@@ -274,7 +274,7 @@ if __name__ == '__main__':
 	#     MAIN
 	########################################################
 	
-	config_filename = take_choice(sys.argv[1:]) 
+	config_filename = take_choice(sys.argv[1:])
 	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
 	

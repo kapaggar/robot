@@ -11,8 +11,8 @@ snmpsink_server = ip_addr
 
 [[__many__]]
 ip = ip_addr
-username = string
-password = string
+username = string(default=admin)
+password = string(default=admin@123)
 brMgmt = string(default = mgmt)
 brStor = string(default = stor)
 
