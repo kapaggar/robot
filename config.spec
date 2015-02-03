@@ -19,8 +19,8 @@ brStor = string(default = stor)
 [[[__many__]]]
 mgmt_ip = ip_addr
 mgmt_mask =  integer(min=8, max=32, default=24)
-gw = ip_addr
-stor_ip = ip_addr
+gw = ip_addr(default=None)
+stor_ip = ip_addr(default=None)
 cpus =  integer(min=1, max=24, default=4)
 memory =  integer(min=8192, max=96000, default=16384)
 stor_mask = integer(min=8, max=32, default=24)
@@ -29,13 +29,17 @@ cluster_vip = ip_addr(default = None)
 name_node = integer(default = None)
 journal_node =  integer(min=1, max=6, default=None)
 cluster_name = string(default = None)
+
 [[[[storage]]]]
 initiatorname_iscsi = string(default = None)
-iscsi_target = ip_addr
-forbidden_nodes = 
+iscsi_target = ip_addr(default=None)
+forbidden_nodes = string_list(default=None)
+
 [[[[multipath-alias]]]]
-pgsql = string
+pgsql = string(default=None)
+
 [[[[tps-fs]]]]
+
 [[[[[__many__]]]]]
 wwid = string
 mount-point = string

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import paramiko
+import os, sys, getopt
 import time
 import re
 import datetime
@@ -152,9 +152,10 @@ class Host(object):
 	def upgradeVMs(self):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
-			print vm.image_fetch()
-			print vm.image_install()
-			print vm.reload()
+			if vm.ssh_self():
+				print vm.image_fetch()
+				print vm.image_install()
+				print vm.reload()
 	
 		
 	
@@ -181,6 +182,7 @@ if __name__ == '__main__':
 			vm = config['HOSTS'][host][vm_name]['vm_ref']
 			if vm.ssh_self():
 				print vm.factory_revert()
+				print vm.install_license()
 				print vm.setSnmpServer()
 				print vm.config_dns()
 				print vm.config_ntp()
@@ -240,11 +242,40 @@ if __name__ == '__main__':
 			if vm.is_namenode():
 				if vm.ssh_self():
 					print vm.setup_HDFS()
+					
+	def manufVMs(host):
+		host.enableVirt()
+		host.synctime()
+		host.setDNS()
+		host.getMfgCd()
+		host.delete_template()
+		host.create_template()
+		host.deleteVMs()
+		host.declareVMs()
+		host.instantiateVMs()
+		host.startVMs()
+		
+	def take_choice(argv):
+		inputfile = ''
+		try:
+			opts, args = getopt.getopt(argv,"hi:",["ifile="])
+		except getopt.GetoptError:
+			print 'Host.py -i <INI.File>'
+			sys.exit(2)
+		for opt, arg in opts:
+			if opt == '-h':
+				print 'Host.py -i <INI.File>'
+				sys.exit()
+			elif opt in ("-i", "--inifile"):
+				inputfile = arg
+		return inputfile
 	
 	########################################################
 	#     MAIN
 	########################################################
-	config_filename = 'FIVE.ini'
+	
+	config_filename = take_choice(sys.argv[1:]) 
+	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
@@ -261,9 +292,9 @@ if __name__ == '__main__':
 		print 'Config file %s validation failed!'% config_filename
 		sys.exit(1)
 	
-	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
+
 	start_time = time.time()
 	
 	#TODO Method Extraction
@@ -271,43 +302,52 @@ if __name__ == '__main__':
 	#Setup Hosts Connectivity 
 	for host_name in hosts:
 		host = Host(config,host_name)
+		config['HOSTS'][host_name]['host_ref'] = host
 		host.connectSSH()
 			
 			
-	if install_type.find('manufacture'):
+	if 'manufacture' in install_type:
+		print Fore.RED + 'Manufacture Option Set' + Fore.RESET
+		threads = []
 		for host_name in hosts:
-			host = config['HOSTS'][host_name]['ssh_session']
-			host.enableVirt()
-			host.synctime()
-			host.setDNS()
-			host.getMfgCd()
-			host.delete_template()
-			host.create_template()
-			host.deleteVMs()
-			host.declareVMs()
-			host.instantiateVMs()
-			host.startVMs()
-		allvms = get_allvms(config)
-		for line in allvms:
-			host,vm_name = line.split(":")
-			vm = vm_node(config,host,vm_name)
-			config['HOSTS'][host][vm_name]['vm_ref'] = vm
-		basic_settings(allvms)
-		generate_keys(allvms)
-		shareKeys(allvms)
-		setupClusters(allvms)
-		setupStorage(allvms)
-		setupHDFS(allvms)	
-		manuf_runtime = time.time() - start_time
-		print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
+			host = config['HOSTS'][host_name]['host_ref']
+			newThread = threading.Thread(target=manufVMs, args = (host,))
+			newThread.start()
+			threads.append(newThread)
+			
+		#Wait for all threads to complete and sync up. till the point when VMs have been booted 
+		for thread in threads:
+			thread.join()
+
+
+	allvms = get_allvms(config)
+
+	for line in allvms:
+		host,vm_name = line.split(":")
+		vm = vm_node(config,host,vm_name)
+		config['HOSTS'][host][vm_name]['vm_ref'] = vm
+
+	basic_settings(allvms)
+	generate_keys(allvms)
+	shareKeys(allvms)
+	setupClusters(allvms)
+	setupStorage(allvms)
+	setupHDFS(allvms)	
+	manuf_runtime = time.time() - start_time
+	print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
 		
 	# TODO Method Extraction
-	thread = []
-	
-	if install_type.find('upgrade'):
+
+	if 'upgrade' in install_type:
+		print Fore.RED + 'Upgrade Option set' + Fore.RESET
+		threads = []
 		for host_name in hosts:
-			host = Host(config,host_name)
-			print host.upgradeVMs()
+			host = config['HOSTS'][host_name]['host_ref']
+			newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
+			
+		for thread in threads:
+			thread.join()
+			
 
 
 	total_runtime = time.time() - start_time
