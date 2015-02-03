@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os,sys
+import os, sys, getopt
 import time
 import re
 import datetime
@@ -254,11 +254,28 @@ if __name__ == '__main__':
 		host.declareVMs()
 		host.instantiateVMs()
 		host.startVMs()
-
+		
+	def take_choice(argv):
+		inputfile = ''
+		try:
+			opts, args = getopt.getopt(argv,"hi:",["ifile="])
+		except getopt.GetoptError:
+			print 'Host.py -i <INI.File>'
+			sys.exit(2)
+		for opt, arg in opts:
+			if opt == '-h':
+				print 'Host.py -i <INI.File>'
+				sys.exit()
+			elif opt in ("-i", "--inifile"):
+				inputfile = arg
+		return inputfile
+	
 	########################################################
 	#     MAIN
 	########################################################
-	config_filename = 'setup.ini'
+	
+	config_filename = take_choice(sys.argv[1:])
+	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
@@ -274,7 +291,6 @@ if __name__ == '__main__':
 				print 'The following section was missing:%s ' % ', '.join(section_list)     
 		print 'Config file %s validation failed!'% config_filename
 		sys.exit(1)
-	
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
