@@ -1,5 +1,6 @@
 [HOSTS]
 iso_path = string(default=nightly)
+upgrade_img = string(default=None)
 nightly_dir = string(default=http://kite.ggn.in.guavus.com/snoopy/work/platform-master/output/product-guavus-x86_64/release/mfgcd)
 name_server = ip_addr(default = 103.14.2.35)
 release_ver = string(default = nightly)
@@ -10,8 +11,8 @@ snmpsink_server = ip_addr
 
 [[__many__]]
 ip = ip_addr
-username = string
-password = string
+username = string(default=admin)
+password = string(default=admin@123)
 brMgmt = string(default = mgmt)
 brStor = string(default = stor)
 

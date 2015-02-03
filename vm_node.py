@@ -53,6 +53,7 @@ class vm_node(object):
 		self._tps_fs = config['HOSTS'][host][vm]['tps-fs']
 		self._release_ver = config['HOSTS']['release_ver']
 		self._cluster_name = config['HOSTS'][host][vm]['cluster_name']
+		self._upgrade_img = config['HOSTS']['upgrade_img']
 		self.nodes_ip[vm] = config['HOSTS'][host][vm]['mgmt_ip']
 		self.config_ref = config
 		if self._namenode:
@@ -185,7 +186,13 @@ class vm_node(object):
 					time.sleep(10)
 					timeOut = timeOut - 10        
 			if vm_up :
-				self._ssh_session = session(host=self._ip, username='admin', password='admin@123')
+				#Find out admin user pass ( if not in config set default)
+				#username = 'admin'
+				#password = 'admin@123'
+				#for cred in self._enabledusers:
+				#	username,password = cred.split(":")
+				#	if username.find('admin'):
+				self._ssh_session = session(host=self._ip, username="admin" , password="admin@123")
 				return self._ssh_session
 			else :
 				print "Should return exception that SSH connection can;t be made to the VM"  
@@ -354,9 +361,8 @@ class vm_node(object):
 		for fs_name in self._tps_fs.keys():
 			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
 		return output
-	
-		
-	
+
+
 	def format_storage(self):
 		output = ''
 		for fs_name in self._tps_fs.keys():
@@ -430,6 +436,28 @@ class vm_node(object):
 		output =  session.executeCli('cluster master self')
 		return output 
 
+	def image_fetch(self):
+		output = ''
+		output += self._ssh_session.executeCli('image fetch %s'%self._upgrade_img)
+		return output
+	
+	def image_install(self):
+		output = ''
+		image_name = self._upgrade_img.split("/")[-1]
+		output += self._ssh_session.executeCli('image install %s'%image_name)
+		#TODO check error
+		output += self._ssh_session.executeCli('image boot next')
+		return output
 
+	def reload(self):
+		output = ''
+		output += self._ssh_session.executeCli('config write')
+		output += self._ssh_session.executeCli('reload')
+		return output
+
+	def install_license(self):
+		output = ''
+		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
+		return output
 if __name__ == '__main__':
 	pass
