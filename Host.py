@@ -158,118 +158,118 @@ class Host(object):
 				print vm.reload()
 	
 		
-	
-if __name__ == '__main__':
-	def get_hosts(config):
-		hosts = []	
-		for section in config['HOSTS']:
-			if isinstance(config['HOSTS'][section], dict):
-				hosts.append(config['HOSTS'][section].name)
-		return hosts
-	def get_allvms(config):
-		tuples = []	
-		for host_section in config['HOSTS']:
-			if isinstance(config['HOSTS'][host_section], dict):
-				for vm_section in config['HOSTS'][host_section]:
-					if isinstance(config['HOSTS'][host_section][vm_section], dict):
-						tuples.append(host_section + ":" + vm_section)
-		return tuples
-	
-	def basic_settings(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
-			if vm.ssh_self():
-				print vm.factory_revert()
-				print vm.install_license()
-				print vm.setSnmpServer()
-				print vm.config_dns()
-				print vm.config_ntp()
-				print vm.configusers()
-				print vm.setHostName()
-				print vm.setIpHostMaps()
-				print vm.setStorNw()
+
+def get_hosts(config):
+	hosts = []	
+	for section in config['HOSTS']:
+		if isinstance(config['HOSTS'][section], dict):
+			hosts.append(config['HOSTS'][section].name)
+	return hosts
+def get_allvms(config):
+	tuples = []	
+	for host_section in config['HOSTS']:
+		if isinstance(config['HOSTS'][host_section], dict):
+			for vm_section in config['HOSTS'][host_section]:
+				if isinstance(config['HOSTS'][host_section][vm_section], dict):
+					tuples.append(host_section + ":" + vm_section)
+	return tuples
+
+def basic_settings(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			print vm.factory_revert()
+			print vm.install_license()
+			print vm.setSnmpServer()
+			print vm.config_dns()
+			print vm.config_ntp()
+			print vm.configusers()
+			print vm.setHostName()
+			print vm.setIpHostMaps()
+			print vm.setStorNw()
+			print vm.config_write()
+
+def generate_keys(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			print vm.gen_dsakey()
+
+def shareKeys(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		print "Now sharing pub-keys inside VM %s"%vm_name
+		if vm.ssh_self():
+			print vm.removeAuthKeys()
+			print vm.authPubKeys()
+			print vm.config_write()
+
+def setupClusters(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		print "Now setting clusters inside VM %s"%vm_name
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			if vm.is_clusternode():
+				print vm.setclustering()
+				time.sleep(5) # Let clustering settle down
 				print vm.config_write()
-	
-	def generate_keys(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
-			if vm.ssh_self():
-				print vm.gen_dsakey()
-	
-	def shareKeys(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
-			print "Now sharing pub-keys inside VM %s"%vm_name
-			if vm.ssh_self():
-				print vm.removeAuthKeys()
-				print vm.authPubKeys()
+			else:
+				print "nothing to do in %s" %vm_name
+
+def setupStorage(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		print(Fore.RED + "Now setting up storage inside VM %s"%vm_name + Fore.RESET) 
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			if vm.has_storage():
+				print vm.bring_storage()
+				print vm.format_storage()
+				print vm.mount_storage()
 				print vm.config_write()
-	
-	def setupClusters(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			print "Now setting clusters inside VM %s"%vm_name
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
+
+def setupHDFS(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		print "Now setting up HDFS inside VM %s"%vm_name
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
 			if vm.ssh_self():
-				if vm.is_clusternode():
-					print vm.setclustering()
-					time.sleep(5) # Let clustering settle down
-					print vm.config_write()
-				else:
-					print "nothing to do in %s" %vm_name
+				print vm.setup_HDFS()
+				
+def manufVMs(host):
+	host.enableVirt()
+	host.synctime()
+	host.setDNS()
+	host.getMfgCd()
+	host.delete_template()
+	host.create_template()
+	host.deleteVMs()
+	host.declareVMs()
+	host.instantiateVMs()
+	host.startVMs()
 	
-	def setupStorage(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			print(Fore.RED + "Now setting up storage inside VM %s"%vm_name + Fore.RESET) 
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
-			if vm.ssh_self():
-				if vm.has_storage():
-					print vm.bring_storage()
-					print vm.format_storage()
-					print vm.mount_storage()
-					print vm.config_write()
-	
-	def setupHDFS(tuples):
-		for line in tuples:
-			host,vm_name = line.split(":")
-			print "Now setting up HDFS inside VM %s"%vm_name
-			vm = config['HOSTS'][host][vm_name]['vm_ref']
-			if vm.is_namenode():
-				if vm.ssh_self():
-					print vm.setup_HDFS()
-					
-	def manufVMs(host):
-		host.enableVirt()
-		host.synctime()
-		host.setDNS()
-		host.getMfgCd()
-		host.delete_template()
-		host.create_template()
-		host.deleteVMs()
-		host.declareVMs()
-		host.instantiateVMs()
-		host.startVMs()
-		
-	def take_choice(argv):
-		inputfile = ''
-		try:
-			opts, args = getopt.getopt(argv,"hi:",["ifile="])
-		except getopt.GetoptError:
+def take_choice(argv):
+	inputfile = ''
+	try:
+		opts, args = getopt.getopt(argv,"hi:",["ifile="])
+	except getopt.GetoptError:
+		print 'Host.py -i <INI.File>'
+		sys.exit(2)
+	for opt, arg in opts:
+		if opt == '-h':
 			print 'Host.py -i <INI.File>'
-			sys.exit(2)
-		for opt, arg in opts:
-			if opt == '-h':
-				print 'Host.py -i <INI.File>'
-				sys.exit()
-			elif opt in ("-i", "--inifile"):
-				inputfile = arg
-		return inputfile
-	
+			sys.exit()
+		elif opt in ("-i", "--inifile"):
+			inputfile = arg
+	return inputfile
+
+if __name__ == '__main__':	
 	########################################################
 	#     MAIN
 	########################################################
@@ -353,8 +353,7 @@ if __name__ == '__main__':
 	total_runtime = time.time() - start_time
 	print Fore.BLUE + 'Total Runtime:' + str(datetime.timedelta(seconds=total_runtime)) + Fore.RESET
 			
-	#TODO: ROOT_2 ignore install
-	#TODO: optional / force format iscsi
-	
-	
-
+#TODO: ROOT_2 ignore install
+#TODO: optional / force format iscsi
+#TODO TO raise socket.error('Socket is closed')
+#TODO socket.error: Socket is closed
