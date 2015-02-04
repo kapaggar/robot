@@ -48,7 +48,7 @@ class session(object):
 		""" Connect to the host at the IP address specified."""
 		self.session = paramiko.SSHClient()
 		self.session.load_host_keys(os.path.expanduser("/dev/null"))
-		self.session.load_system_host_keys()
+		#self.session.load_system_host_keys()
 		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
 		self.transport = self.session.get_transport()
