@@ -47,6 +47,7 @@ class session(object):
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
 		self.session = paramiko.SSHClient()
+		self.session.load_host_keys(os.path.expanduser("/dev/null"))
 		self.session.load_system_host_keys()
 		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
@@ -154,11 +155,25 @@ class session(object):
 		self.write("quit")
 
 	def getPrompt(self):
-		self.write("")
-		buff = self.read()
-		buff = buff.splitlines()[-1]
-		prompt =  self.tellPrompt(buff) 
-		return prompt         
+		got_prompt = False
+		timeOut = 60
+		while timeOut > 0:
+			self.write("")
+			buff = self.read()
+			lines = buff.splitlines()
+			if len(lines) > 0:
+				buff = lines[-1]
+				got_prompt = True
+				break
+			else :
+				timeOut = timeOut - 1
+		try:
+			if got_prompt:
+				prompt = self.tellPrompt(buff) 
+				return prompt   
+		except Exception:
+			print "Unable to reach a Prompt"
+			return False
 
 	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1):
 		prompt = self.getPrompt()
@@ -173,12 +188,17 @@ class session(object):
 			self.run_till_prompt("quit",self.re_pmxPrompt,wait=1)
 			self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			output = self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			return output
 		elif prompt == "login":
 			self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output = self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
 			return output
-		print "Was not able to run command #Todo Raise exception"
+		elif prompt == "en":
+			self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
+			output = self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			return output
+		print "Was not able to run command on prompt=> %s"%prompt #Todo Raise exception"
 			
 
 
@@ -238,17 +258,43 @@ class session(object):
 
 
 	def write(self, cmd):
-		while not self.chan.send_ready():
-			time.sleep(1)
-		self.current_send_string = cmd	
-		self.chan.send(cmd + self.newline )
+		timeOut = 60
+		sent_data = False
+		while timeOut > 0 :
+			if self.chan.send_ready():
+				self.current_send_string = cmd	
+				self.chan.send(cmd + self.newline )
+				sent_data = True
+				break
+			else:
+				time.sleep(0.5)
+				timeOut = timeOut - 1
+		try:
+			if sent_data:
+				return True
+		except Exception:
+			print "Unable to write cmd %s to Channel (Channel not Ready)"%cmd
+			return False
+
 
 	def read(self):
 		data = ""
-		time.sleep(1)
-		if self.chan.recv_ready():
-			data = unicode(self.chan.recv(4096), errors='replace')
-		return data
+		got_data = False
+		timeOut = 120
+		while timeOut > 0 :
+			if self.chan.recv_ready():
+				data = unicode(self.chan.recv(4096), errors='replace')
+				got_data = True
+				break
+			else:
+				time.sleep(0.5)
+				timeOut = timeOut - 1
+		try:
+			if got_data:
+				return data
+		except Exception:
+			print "Unable to read from channel"
+			return False
 
 	def read_all(self):
 		data = ""

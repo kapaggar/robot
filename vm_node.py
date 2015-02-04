@@ -301,11 +301,12 @@ class vm_node(object):
 		
 	def setStorNw(self):
 		output = ''
-		output += self._ssh_session.executeCli('no interface %s ip address' %self._storNic)
-		output += self._ssh_session.executeCli('interface %s ip address %s /%s' %(self._storNic, self._stor_ip, self._stor_mask))
+		if self._stor_ip is not None:
+			output += self._ssh_session.executeCli('no interface %s ip address' %self._storNic)
+			output += self._ssh_session.executeCli('interface %s ip address %s /%s' %(self._storNic, self._stor_ip, self._stor_mask))
 		return output
 	
-	def setup_HDFS(self):
+	def setup_HDFS(self):	
 		HA =''
 		journal_nodes = ''
 		output = ''
