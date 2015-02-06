@@ -30,6 +30,10 @@ class Host(object):
 		self._release_ver = self.config['HOSTS']['release_ver']
 		self._vms = self.get_vms()
 		self._ssh_session = None
+		
+	def __del__(self):
+		if self._ssh_session != None:
+			self._ssh_session.close()
 
 	def connectSSH(self):
 		self._ssh_session = session(self._ip, self._username, self._password)
@@ -40,6 +44,14 @@ class Host(object):
 		output = ''
 		output += self._ssh_session.executeCli('virt enable')
 		return output
+	
+	def wipe_setup(self):
+		output = ''
+		output +=  self._ssh_session.executeCli('no virt volume file template.img')
+		for vm_name in self._vms:
+			output +=  self._ssh_session.executeCli('no virt volume file %s.img'%vm_name)
+		return output
+
 	
 	def delete_template(self):
 		output = ''
@@ -140,7 +152,7 @@ class Host(object):
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			print vm.set_storage()
+			print vm.clone_volume()
 			print vm.configure()
 			print vm.set_mfgdb()
 	
@@ -180,6 +192,7 @@ def basic_settings(tuples):
 		print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
+			print vm.rotate_logs()
 			print vm.factory_revert()
 			print vm.install_license()
 			print vm.setSnmpServer()
@@ -243,21 +256,22 @@ def setupHDFS(tuples):
 				print vm.setup_HDFS()
 				
 def manufVMs(host):
-	host.enableVirt()
-	host.synctime()
-	host.setDNS()
-	host.getMfgCd()
-	host.delete_template()
-	host.create_template()
-	host.deleteVMs()
-	host.declareVMs()
-	host.instantiateVMs()
-	host.startVMs()
+	print host.enableVirt()
+	print host.synctime()
+	print host.setDNS()
+	print host.getMfgCd()
+	print host.delete_template()
+	print host.create_template()
+	print host.deleteVMs()
+	print host.declareVMs()
+	print host.instantiateVMs()
+	print host.startVMs()
 	
 def take_choice(argv):
+	global full_wipe
 	inputfile = ''
 	try:
-		opts, args = getopt.getopt(argv,"hi:",["ifile="])
+		opts, args = getopt.getopt(argv,"hi:w",["ifile="])
 	except getopt.GetoptError:
 		print 'Host.py -i <INI.File>'
 		sys.exit(2)
@@ -267,13 +281,15 @@ def take_choice(argv):
 			sys.exit()
 		elif opt in ("-i", "--inifile"):
 			inputfile = arg
+		elif opt in ("--wipe"):
+			full_wipe = True
 	return inputfile
 
 if __name__ == '__main__':	
 	########################################################
 	#     MAIN
 	########################################################
-	
+	full_wipe = False
 	config_filename = take_choice(sys.argv[1:])
 	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
@@ -357,3 +373,4 @@ if __name__ == '__main__':
 #TODO: optional / force format iscsi
 #TODO TO raise socket.error('Socket is closed')
 #TODO socket.error: Socket is closed
+# force noHA noyarnHA noyarn

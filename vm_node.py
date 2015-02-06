@@ -89,8 +89,12 @@ class vm_node(object):
 	def hostid_generator(self):
 		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
 
-	def set_storage(self):
+	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always /data/virt/pools/default/template.img %s" % self._diskimageFull)
+		return output
+	
+	def delete_volume(self):
+		output =  self._host_ssh_session.executeCli("no virt volume file %s" % self._diskimage)
 		return output
 
 	def set_mfgdb(self):
@@ -138,12 +142,20 @@ class vm_node(object):
 		
 		return output
 
+	def disable_paging(remote_conn):
+		output = ''
+		output += self._host_ssh_session.executeCli("no cli default paging enable")
+		return output
 		
 	def power_on(self):
-		return self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
+		output = ''
+		output += self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
+		return output
 			
 	def power_off(self):
-		return self._host_ssh_session.executeCli('virt vm %s power off force' % self._name )
+		output = ''
+		output += self._host_ssh_session.executeCli('virt vm %s power off force' % self._name )
+		return output
 		
 	def configure(self):
 		output = ''
@@ -217,7 +229,7 @@ class vm_node(object):
 		return output
 
 
-	def set_user(self,user,password='admin@123'):
+	def set_user(self,user,password):
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
 		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
@@ -250,10 +262,14 @@ class vm_node(object):
 		return output
 
 	def factory_revert(self):
-	   return self._ssh_session.executeCli('configuration revert factory',wait=10)
+		output = ''
+		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
+		return output
 
 	def set_snmpsink(self):
-		return self._ssh_session.executeCli('snmp-server host %s traps version 2c '%self._snmpsink)
+		output = ''
+		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c '%self._snmpsink)
+		return output
 	
 	def setIpHostMaps(self):
 		output = ''
@@ -268,6 +284,7 @@ class vm_node(object):
 			if user == "root":
 				continue
 			output += self._ssh_session.executeCli('_exec mdreq set delete - /ssh/server/username/%s/auth-key/sshv2/ '%user)
+		return output
 	
 	def authPubKeys(self):
 		output = ''
@@ -280,7 +297,9 @@ class vm_node(object):
 		return output
 			
 	def rotate_logs(self):
-		return self._ssh_session.executeCli('logging files rotation force')
+		output = ''
+		output += self._ssh_session.executeCli('logging files rotation force')
+		return output
 		
 	def is_clusternode(self):
 		if self._clusterVIP is not None:
@@ -297,7 +316,9 @@ class vm_node(object):
 			return False
 	
 	def setSnmpServer(self):
-		return self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		output = ''
+		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		return output
 		
 	def setStorNw(self):
 		output = ''
@@ -348,10 +369,10 @@ class vm_node(object):
 		output = ''
 		output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
 		output += self._ssh_session.executeCli('_exec service iscsid restart')
-		output +=  self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
-		output +=  self._ssh_session.executeCli('tps iscsi restart')
+		output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
+		output += self._ssh_session.executeCli('tps iscsi restart')
 		time.sleep(15)
-		output +=  self._ssh_session.executeCli('tps multipath renew ')
+		output += self._ssh_session.executeCli('tps multipath renew ')
 		return output
 		
 	def remove_storage(self):
@@ -396,7 +417,9 @@ class vm_node(object):
 		return output
 
 	def config_write(self):
-		return self._ssh_session.executeCli('config write')
+		output = ''
+		output += self._ssh_session.executeCli('config write')
+		return output
 	
 	def dottedQuadToNum(self,ip):
 		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
@@ -421,9 +444,9 @@ class vm_node(object):
 		if not self._cluster_name:
 			self._cluster_name = self._set_clusterName() 
 		output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
-		output +=  self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
-		output +=  self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
-		output +=  self._ssh_session.executeCli('cluster enable')
+		output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
+		output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
+		output += self._ssh_session.executeCli('cluster enable')
 		return output
 		
 	def disable_clustering(self):
@@ -432,6 +455,7 @@ class vm_node(object):
 		return session.executeCli('no cluster enable')
 
 	def set_clusterMaster(self):
+		output = ''
 		if not self.is_clusternode():
 			return False # raise exception
 		output =  session.executeCli('cluster master self')
