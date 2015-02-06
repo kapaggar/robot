@@ -44,39 +44,39 @@ class session(object):
 	def username(self):
 		return self._username
 	
-def connect(self):
-	""" Connect to the host at the IP address specified."""
-	retry = 0
-	self.session = paramiko.SSHClient()
-	self.session.load_host_keys(os.path.expanduser("/dev/null"))
-	#self.session.load_system_host_keys()
-	self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	while retry < 5:
-		try:
-			self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
-			self.transport = self.session.get_transport()
-			#self.transport.set_keepalive(15)
-			self.chan = self.session.invoke_shell()
-			self.chan.settimeout(1200)
-			self.chan.set_combine_stderr(True)
-			return
-		except socket.error, (value,message):
-			if value == 61:
-				print 'SSH Connection refused, will retry in 5 seconds'
+	def connect(self):
+		""" Connect to the host at the IP address specified."""
+		retry = 0
+		self.session = paramiko.SSHClient()
+		self.session.load_host_keys(os.path.expanduser("/dev/null"))
+		#self.session.load_system_host_keys()
+		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		while retry < 5:
+			try:
+				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
+				self.transport = self.session.get_transport()
+				#self.transport.set_keepalive(15)
+				self.chan = self.session.invoke_shell()
+				self.chan.settimeout(1200)
+				self.chan.set_combine_stderr(True)
+				return
+			except socket.error, (value,message):
+				if value == 61:
+					print 'SSH Connection refused, will retry in 5 seconds'
+					time.sleep(5)
+					retry += 1
+				else:
+					raise
+			except paramiko.BadHostKeyException:
+				print "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host
+				print 'Edit that file to remove the entry and then hit return to try again'
+				rawinput('Hit Enter when ready')
+				retry += 1
+			except EOFError:
+				print 'Unexpected Error from SSH Connection, retrying in 5 seconds'
 				time.sleep(5)
 				retry += 1
-			else:
-				raise
-		except paramiko.BadHostKeyException:
-			print "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host
-			print 'Edit that file to remove the entry and then hit return to try again'
-			rawinput('Hit Enter when ready')
-			retry += 1
-		except EOFError:
-			print 'Unexpected Error from SSH Connection, retrying in 5 seconds'
-			time.sleep(5)
-			retry += 1
-			print 'Could not establish SSH connection'
+				print 'Could not establish SSH connection'
 
 	def close(self):
 		self.chan.close()

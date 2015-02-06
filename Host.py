@@ -348,7 +348,7 @@ if __name__ == '__main__':
 	shareKeys(allvms)
 	setupClusters(allvms)
 	setupStorage(allvms)
-	setupHDFS(allvms)	
+	setupHDFS(allvms)
 	manuf_runtime = time.time() - start_time
 	print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
 		
