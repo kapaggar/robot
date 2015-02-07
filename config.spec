@@ -15,6 +15,7 @@ username = string(default=admin)
 password = string(default=admin@123)
 brMgmt = string(default = mgmt)
 brStor = string(default = stor)
+template_file = string(default = /data/virt/pools/default/template.img )
 
 [[[__many__]]]
 mgmt_ip = ip_addr
@@ -24,6 +25,8 @@ stor_ip = ip_addr(default=None)
 cpus =  integer(min=1, max=24, default=4)
 memory =  integer(min=8192, max=96000, default=16384)
 stor_mask = integer(min=8, max=32, default=24)
+mgmtNic = string(default = eth0 )
+storNic = string(default = eth1 )
 enabled_users = string_list
 cluster_vip = ip_addr(default = None)
 name_node = integer(default = None)
@@ -43,5 +46,4 @@ pgsql = string(default=None)
 [[[[[__many__]]]]]
 wwid = string
 mount-point = string
-
-
+format = boolean(default = no )

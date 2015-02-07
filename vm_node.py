@@ -18,44 +18,44 @@ class vm_node(object):
 	data_nodes = []
 	re_ssh_pubkey = re.compile( r"^(?P<pubkey>ssh-dss\s+\S+)",re.M)
 
-	def __init__(self,config,host,vm,template="/data/virt/pools/default/template.img"):
+	def __init__(self,config,host,vm):
 		self._name = vm
 		self._host = host
-		self._host_ssh_session = config['HOSTS'][host]['ssh_session'] 
 		self._ssh_session = None
-		self._ip = config['HOSTS'][host][vm]['mgmt_ip']
-		self._mask = config['HOSTS'][host][vm]['mgmt_mask']
-		self._gw = config['HOSTS'][host][vm]['gw']
-		self._brMgmt = config['HOSTS'][host]['brMgmt']
-		self._mgmtNic = "eth0"
-		self._mgmtMac = self.randomMAC()
-		self._stor_ip = config['HOSTS'][host][vm]['stor_ip']
-		self._stor_mask = config['HOSTS'][host][vm]['stor_mask']
-		self._storNic = "eth1"
-		self._storMac = self.randomMAC()
-		self._brStor = config['HOSTS'][host]['brStor']
-		self._template = template
-		self._cpu = config['HOSTS'][host][vm]['cpus']
-		self._memory = config['HOSTS'][host][vm]['memory']
-		self._hostid=self.hostid_generator()
-		self._diskimageFull="/data/virt/pools/default/%s.img" % self._name
-		self._diskimage = "%s.img" % self._name
-		self._enabledusers = config['HOSTS'][host][vm]['enabled_users']
 		self._dsakey = None
-		self._ntpserver = config['HOSTS']['ntp_server']
-		self._name_server = config['HOSTS']['name_server']
-		self._snmpsink = config['HOSTS']['snmpsink_server']
-		self._clusterVIP = config['HOSTS'][host][vm]['cluster_vip']
-		self._namenode = config['HOSTS'][host][vm]['name_node']
-		self._journalnode = config['HOSTS'][host][vm]['journal_node']
-		self._initiatorname_iscsi = config['HOSTS'][host][vm]['storage']['initiatorname_iscsi']
-		self._iscsi_target = config['HOSTS'][host][vm]['storage']['iscsi_target']
-		self._tps_fs = config['HOSTS'][host][vm]['tps-fs']
-		self._release_ver = config['HOSTS']['release_ver']
-		self._cluster_name = config['HOSTS'][host][vm]['cluster_name']
-		self._upgrade_img = config['HOSTS']['upgrade_img']
-		self.nodes_ip[vm] = config['HOSTS'][host][vm]['mgmt_ip']
-		self.config_ref = config
+		self._mgmtMac = self.randomMAC()
+		self._storMac = self.randomMAC()
+		self._hostid = self.hostid_generator()
+		self._diskimageFull = "/data/virt/pools/default/%s.img" % self._name
+		self._diskimage = "%s.img" % self._name
+		self._ntpserver				= config['HOSTS']['ntp_server']
+		self._name_server			= config['HOSTS']['name_server']
+		self._snmpsink				= config['HOSTS']['snmpsink_server']
+		self._release_ver			= config['HOSTS']['release_ver']
+		self._upgrade_img			= config['HOSTS']['upgrade_img']
+		self._host_ssh_session		= config['HOSTS'][host]['ssh_session']
+		self._brMgmt				= config['HOSTS'][host]['brMgmt']
+		self._brStor				= config['HOSTS'][host]['brStor']
+		self._template				= config['HOSTS'][host]['template_file']
+		self._enabledusers			= config['HOSTS'][host][vm]['enabled_users']
+		self._clusterVIP			= config['HOSTS'][host][vm]['cluster_vip']
+		self._namenode				= config['HOSTS'][host][vm]['name_node']
+		self._journalnode			= config['HOSTS'][host][vm]['journal_node']
+		self._initiatorname_iscsi	= config['HOSTS'][host][vm]['storage']['initiatorname_iscsi']
+		self._iscsi_target			= config['HOSTS'][host][vm]['storage']['iscsi_target']
+		self._tps_fs				= config['HOSTS'][host][vm]['tps-fs']
+		self._cluster_name			= config['HOSTS'][host][vm]['cluster_name']
+		self._mgmtNic				= config['HOSTS'][host][vm]['mgmtNic']
+		self._storNic				= config['HOSTS'][host][vm]['storNic']
+		self.nodes_ip[vm]			= config['HOSTS'][host][vm]['mgmt_ip']
+		self._ip					= config['HOSTS'][host][vm]['mgmt_ip']
+		self._mask					= config['HOSTS'][host][vm]['mgmt_mask']
+		self._gw					= config['HOSTS'][host][vm]['gw']
+		self._stor_ip				= config['HOSTS'][host][vm]['stor_ip']
+		self._stor_mask				= config['HOSTS'][host][vm]['stor_mask']
+		self._cpu					= config['HOSTS'][host][vm]['cpus']
+		self._memory				= config['HOSTS'][host][vm]['memory']
+		self.config_ref				= config
 		if self._namenode:
 			self.name_nodes.append(self._name)
 		elif self._journalnode:
@@ -85,12 +85,11 @@ class vm_node(object):
 		random.randint(0x00, 0xff) ]
 		return ':'.join(map(lambda x: "%02x".upper() % x, mac))
 
-
 	def hostid_generator(self):
 		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
 
 	def clone_volume(self):
-		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always /data/virt/pools/default/template.img %s" % self._diskimageFull)
+		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
 		return output
 	
 	def delete_volume(self):
@@ -101,7 +100,8 @@ class vm_node(object):
 		output = ''
 		var_offset = None
 		re_varoffset = re.compile( r"^\S+\.img8\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
-		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' %self._diskimageFull)
+		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
+		
 		try:
 			match = re_varoffset.search(layout_template)
 			if match:
@@ -109,13 +109,14 @@ class vm_node(object):
 			else:
 				return False
 		except Exception:
-			print ("error matching varOffset in %s" %self._diskimageFull)
+			print ("error matching varOffset in %s" % self._diskimageFull )
 			return False
+		
 		offset_bytes = int(var_offset) * 512
-			
-		output += self._host_ssh_session.executeCli('_exec /sbin/losetup -d /dev/loop0')
-		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup /dev/loop0 %s -o %s ' % (self._diskimageFull,offset_bytes)) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
-		output +=  self._host_ssh_session.executeCli('_exec mount /dev/loop0 /mnt/cdrom/')
+		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
+		loop_dev = self._get_loop_device()
+		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
+		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
 		#TODO make a config.dir backp
 		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
 		
@@ -138,7 +139,7 @@ class vm_node(object):
 		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2/macaddr macaddr802 %s" % self._storMac )
 
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
-		output +=  self._host_ssh_session.executeCli('_exec losetup -d /dev/loop0')
+		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
 		
 		return output
 
@@ -146,17 +147,17 @@ class vm_node(object):
 		output = ''
 		output += self._host_ssh_session.executeCli("no cli default paging enable")
 		return output
-		
+
 	def power_on(self):
 		output = ''
 		output += self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
 		return output
-			
+
 	def power_off(self):
 		output = ''
 		output += self._host_ssh_session.executeCli('virt vm %s power off force' % self._name )
 		return output
-		
+
 	def configure(self):
 		output = ''
 		output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)
@@ -183,7 +184,7 @@ class vm_node(object):
 		except Exception:
 			print "cannot run ping"
 			return False
-			
+
 	def ssh_self(self):
 		vm_up = False
 		if not self._ssh_session:           
@@ -213,9 +214,7 @@ class vm_node(object):
 			return self._ssh_session
 		else:
 			return False
-	
-	
-			
+
 	def config_ntp(self):
 		output = ''
 		output += self._ssh_session.executeCli('ntpdate  %s' % self._ntpserver)
@@ -228,19 +227,17 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
 		return output
 
-
 	def set_user(self,user,password):
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
 		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
 		return output
-		
+
 	def configusers(self):
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
 			self.set_user(user,password)
-	
-	
+
 	def gen_dsakey(self):
 		output = ''
 		for creds in self._enabledusers:
@@ -295,22 +292,20 @@ class vm_node(object):
 				continue
 			output += self._ssh_session.executeCli('ssh client user %s authorized-key sshv2 \"%s\"'%(user,pubkey))
 		return output
-			
+
 	def rotate_logs(self):
 		output = ''
 		output += self._ssh_session.executeCli('logging files rotation force')
 		return output
-		
+
 	def is_clusternode(self):
 		if self._clusterVIP is not None:
 			return True
 		else:
 			return False
-			
+
 	def is_namenode(self):
 		if self._namenode:
-			return True
-		elif self.is_clusternode() and self._namenode:
 			return True
 		else:
 			return False
@@ -319,7 +314,7 @@ class vm_node(object):
 		output = ''
 		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
 		return output
-		
+
 	def setStorNw(self):
 		output = ''
 		if self._stor_ip is not None:
@@ -331,32 +326,35 @@ class vm_node(object):
 		HA =''
 		journal_nodes = ''
 		output = ''
+		client_ip = None 
 		cmd = "no register hadoop_yarn\n"
 		cmd += "register hadoop_yarn\n"
+		
 		if self.is_clusternode():
 			HA = 'True'
+			client_ip = self._clusterVIP
 		else:
 			HA = 'False'
-		cmd += "set hadoop_yarn config_ha %s \n" % HA
-	
-		for node in self.journal_nodes:
-			cmd += "set hadoop_yarn journalnodes %s \n" % node
-	
-		for node in self.name_nodes:
-			cmd += "set hadoop_yarn journalnodes %s \n" % node
-	
-		cmd += "set hadoop_yarn namenode1 %s \n"%self.name_nodes[0]
-		if self.is_clusternode():
-			cmd += "set hadoop_yarn namenode2 %s \n"%self.name_nodes[1]
-	
-		cmd += "set hadoop_yarn nameservice %s \n"% self.config_ref['HOSTS']['yarn_nameservice']
-		
-		for node in self.journal_nodes:
-			cmd += "set hadoop_yarn slave %s \n"%self.nodes_ip[node]
-		for node in self.data_nodes:
-			cmd += "set hadoop_yarn slave %s \n"%self.nodes_ip[node]
+			client_ip = self.nodes_ip[self.name_nodes[0]]
 			
-		cmd += "set hadoop_yarn client %s \n"%self._clusterVIP
+		cmd += "set hadoop_yarn config_ha %s \n" % HA
+		cmd += "set hadoop_yarn namenode1 %s \n" % self.name_nodes[0]
+		
+		if self.is_clusternode():
+			cmd += "set hadoop_yarn namenode2 %s \n" % self.name_nodes[1]
+			for node in self.journal_nodes:
+				cmd += "set hadoop_yarn journalnodes %s \n" % node
+			for node in self.name_nodes:
+				cmd += "set hadoop_yarn journalnodes %s \n" % node
+	
+		cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
+
+		for node in self.journal_nodes:
+			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+		for node in self.data_nodes:
+			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+
+		cmd += "set hadoop_yarn client %s \n" % client_ip
 		cmd += "set hadoop_yarn state UNINIT \n"
 		output += self._ssh_session.executePmx(cmd)
 		output += self._ssh_session.executeCli('pm process tps restart')
@@ -374,7 +372,7 @@ class vm_node(object):
 		time.sleep(15)
 		output += self._ssh_session.executeCli('tps multipath renew ')
 		return output
-		
+
 	def remove_storage(self):
 		output = ''
 		for fs_name in self._tps_fs.keys():
@@ -384,24 +382,28 @@ class vm_node(object):
 			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
 		return output
 
-
 	def format_storage(self):
 		output = ''
 		for fs_name in self._tps_fs.keys():
-			count = 15
+			format_option = self._tps_fs[fs_name]['format']
+			if format_option is False:
+				return
+			
+			count = 10
 			wwid = self._tps_fs[fs_name]['wwid'].lower()
-			current_multipaths = self._ssh_session.executeCli('tps multipath show')
-			output +=  Fore.BLUE + current_multipaths + Fore.RESET
-			if count > 0 and wwid in current_multipaths:
-				full_output =  self._ssh_session.executeCli('tps fs format wwid %s no-strict label %s' %(wwid,fs_name),wait=30)
-				output += full_output.splitlines()[-1]
-			elif count > 0 and wwid not in current_multipaths:
-				count-= 1
-				time.sleep(1)
-				continue
-			elif count <=0 :
-				print ("%s lun with wwid=%s  cant be formatted as its not coming in multipath"%(fs_name,wwid))
-				return output
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeCli('tps multipath show')
+				output +=  Fore.BLUE + current_multipaths + Fore.RESET
+				if wwid in current_multipaths:
+					full_output =  self._ssh_session.executeCli('tps fs format wwid %s no-strict label %s' %(wwid,fs_name),wait=30)
+					output += full_output.splitlines()[-1]
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeCli('tps multipath show')
+					print ("waiting for %s lun with wwid=%s to come in multipath. retrying .."%(fs_name,wwid))
+					time.sleep(1)
+					continue
 		return output
 	
 	def mount_storage(self):
@@ -424,12 +426,6 @@ class vm_node(object):
 	def dottedQuadToNum(self,ip):
 		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
 		return long(hexn, 16)
-	
-	def _set_clusterName(self):
-		if self._clusterVIP :
-			return str(self.dottedQuadToNum(self._clusterVIP))
-		else:
-			print "Raise Exception..not a clusterNode still you are asking clusterName"
 	
 	def setHostName(self):
 		output = ''
@@ -484,5 +480,23 @@ class vm_node(object):
 		output = ''
 		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
 		return output
+	
+	def _set_clusterName(self):
+		if self._clusterVIP :
+			return str(self.dottedQuadToNum(self._clusterVIP))
+		else:
+			print "Raise Exception..not a clusterNode still you are asking clusterName"
+
+	def _get_loop_device(self):
+		result = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
+		next_loop_device = "".join(result.split())
+		try:
+			if "/dev/" in next_loop_device:
+				return next_loop_device
+		except Exception :
+				print ("Unable to get a free loop device on Host")
+				return False
+
+
 if __name__ == '__main__':
 	pass

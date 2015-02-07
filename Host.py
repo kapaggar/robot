@@ -10,6 +10,7 @@ from validate import Validator
 from urlgrabber import urlopen
 from colorama import Fore
 from pprint import pprint
+from os.path import basename
 import threading
 ######################################################
 ##            Class HOST
@@ -19,18 +20,21 @@ class Host(object):
 	re_pmxPrompt = re.compile( r"^(?P<pmxPrompt>pm\s+extension\s*>)\s*",re.M)    
 	
 	def __init__(self,config_ref,host):
+		self._ssh_session = None
 		self._name = host
 		self.config = config_ref
-		self._ip = self.config['HOSTS'][self._name ]['ip']
-		self._username = self.config['HOSTS'][self._name ]['username']
-		self._password = self.config['HOSTS'][self._name ]['password']
-		self._name_server = self.config['HOSTS']['name_server']
-		self._ntp_server = self.config['HOSTS']['ntp_server']
-		self._iso_path = self.config['HOSTS']['iso_path']
-		self._release_ver = self.config['HOSTS']['release_ver']
-		self._vms = self.get_vms()
-		self._ssh_session = None
-		
+		self._name_server		= self.config['HOSTS']['name_server']
+		self._ntp_server		= self.config['HOSTS']['ntp_server']
+		self._iso_path			= self.config['HOSTS']['iso_path']
+		self._release_ver		= self.config['HOSTS']['release_ver']
+		self._template_file		= self.config['HOSTS'][self._name ]['template_file']
+		self._ip				= self.config['HOSTS'][self._name ]['ip']
+		self._username			= self.config['HOSTS'][self._name ]['username']
+		self._password			= self.config['HOSTS'][self._name ]['password']
+		self._brMgmt			= self.config['HOSTS'][self._name ]['brMgmt']
+		self._brStor			= self.config['HOSTS'][self._name ]['brStor']
+		self._vms				= self.get_vms()
+
 	def __del__(self):
 		if self._ssh_session != None:
 			self._ssh_session.close()
@@ -47,11 +51,11 @@ class Host(object):
 	
 	def wipe_setup(self):
 		output = ''
-		output +=  self._ssh_session.executeCli('no virt volume file template.img')
+		template_name = basename(self._template_file)
+		output +=  self._ssh_session.executeCli('no virt volume file %s' % template_name)
 		for vm_name in self._vms:
 			output +=  self._ssh_session.executeCli('no virt volume file %s.img'%vm_name)
 		return output
-
 	
 	def delete_template(self):
 		output = ''
@@ -84,12 +88,13 @@ class Host(object):
 	def setDNS(self):
 		return self._ssh_session.executeCli('ip name-server %s '%self._name_server)
 
-	def create_template(self,template_img='/data/virt/pools/default/template.img'):
+	def create_template(self):
 		output = ''
+		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
-		iso_name = iso_path.split('/')[-1]
-		output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % template_img)
-		output +=  self._ssh_session.executeCli('virt vm template storage device drive-number 1 source file template.img mode read-write')
+		iso_name = basename(iso_path)
+		output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
+		output +=  self._ssh_session.executeCli('virt vm template storage device drive-number 1 source file %s mode read-write' % template_name)
 		output +=  self._ssh_session.executeCli('virt vm template vcpus count 4')
 		output +=  self._ssh_session.executeCli('virt vm template memory 16384')
 		output +=  self._ssh_session.run_till_prompt('virt vm template install cdrom file %s disk-overwrite connect-console text timeout 60' % iso_name , "(none) login:",wait=30)
@@ -168,15 +173,23 @@ class Host(object):
 				print vm.image_fetch()
 				print vm.image_install()
 				print vm.reload()
-	
-		
+'''
+Now non-Member functions
+'''
 
+def connect_hosts (hosts):
+	for host_name in hosts:
+		host = Host(config,host_name)
+		config['HOSTS'][host_name]['host_ref'] = host
+		host.connectSSH()
+		
 def get_hosts(config):
 	hosts = []	
 	for section in config['HOSTS']:
 		if isinstance(config['HOSTS'][section], dict):
 			hosts.append(config['HOSTS'][section].name)
 	return hosts
+
 def get_allvms(config):
 	tuples = []	
 	for host_section in config['HOSTS']:
@@ -185,6 +198,32 @@ def get_allvms(config):
 				if isinstance(config['HOSTS'][host_section][vm_section], dict):
 					tuples.append(host_section + ":" + vm_section)
 	return tuples
+
+def do_manufacture():
+	print Fore.RED + 'Manufacture Option Set' + Fore.RESET
+	threads = []
+	for host_name in hosts:
+		host = config['HOSTS'][host_name]['host_ref']
+		newThread = threading.Thread(target=manufVMs, args = (host,))
+		newThread.start()
+		threads.append(newThread)
+	for thread in threads:
+		thread.join()
+		
+def do_upgrade():
+	print Fore.RED + 'Upgrade Option set' + Fore.RESET
+	threads = []
+	for host_name in hosts:
+		host = config['HOSTS'][host_name]['host_ref']
+		newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
+	for thread in threads:
+		thread.join()
+
+def objectify_vms(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = vm_node(config,host,vm_name)
+		config['HOSTS'][host][vm_name]['vm_ref'] = vm
 
 def basic_settings(tuples):
 	for line in tuples:
@@ -256,6 +295,7 @@ def setupHDFS(tuples):
 				print vm.setup_HDFS()
 				
 def manufVMs(host):
+	
 	print host.enableVirt()
 	print host.synctime()
 	print host.setDNS()
@@ -285,6 +325,34 @@ def take_choice(argv):
 			full_wipe = True
 	return inputfile
 
+def validate(config):
+	validator = Validator()
+	results = config.validate(validator)
+	if results != True:
+		for (section_list, key, _) in flatten_errors(config, results):
+			if key is not None:
+				print 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list))
+			else:
+				print 'The following section was missing:%s ' % ', '.join(section_list)     
+		print 'Config file %s validation failed!'% config_filename
+		sys.exit(1)
+
+
+
+
+'''
+Steps:
+1. Take Config as Input
+2. Validate this config
+3. Connect to Hosts and make template and powerUp cloned VMs ( parallely in threads - 1 per Host)
+4. On All VMs ( rotate_logs, factory_revert, install_license, SnmpServer, dns, ntp, users, hostname, hostmaps, extra nics, config_write )
+5. On All VMs Generate SSH_keys
+6. On All VMs Share Keys generated Above
+7. On All VMs Setup Clustering if present
+8. On All VMs Setup Yarn config if present
+9. Connect to Hosts and upgrade VMs  ( parallely in threads - 1 per Host)
+'''
+
 if __name__ == '__main__':	
 	########################################################
 	#     MAIN
@@ -295,82 +363,37 @@ if __name__ == '__main__':
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
-	config.write_empty_values = False
-	validator = Validator()
-	results = config.validate(validator)
-	
-	if results != True:
-		for (section_list, key, _) in flatten_errors(config, results):
-			if key is not None:
-				print 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list))
-			else:
-				print 'The following section was missing:%s ' % ', '.join(section_list)     
-		print 'Config file %s validation failed!'% config_filename
-		sys.exit(1)
+	validate(config)
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
-
 	start_time = time.time()
 	
 	#TODO Method Extraction
-	
 	#Setup Hosts Connectivity 
-	for host_name in hosts:
-		host = Host(config,host_name)
-		config['HOSTS'][host_name]['host_ref'] = host
-		host.connectSSH()
-			
-			
-	if 'manufacture' in install_type:
-		print Fore.RED + 'Manufacture Option Set' + Fore.RESET
-		threads = []
-		for host_name in hosts:
-			host = config['HOSTS'][host_name]['host_ref']
-			newThread = threading.Thread(target=manufVMs, args = (host,))
-			newThread.start()
-			threads.append(newThread)
-			
-		#Wait for all threads to complete and sync up. till the point when VMs have been booted 
-		for thread in threads:
-			thread.join()
+	connect_hosts(hosts)
 
+	if 'manufacture' in install_type:
+		do_manufacture()
 
 	allvms = get_allvms(config)
-
-	for line in allvms:
-		host,vm_name = line.split(":")
-		vm = vm_node(config,host,vm_name)
-		config['HOSTS'][host][vm_name]['vm_ref'] = vm
-
+	objectify_vms(allvms)
+	
 	basic_settings(allvms)
 	generate_keys(allvms)
 	shareKeys(allvms)
 	setupClusters(allvms)
 	setupStorage(allvms)
 	setupHDFS(allvms)
+	
 	manuf_runtime = time.time() - start_time
 	print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
-		
-	# TODO Method Extraction
 
 	if 'upgrade' in install_type:
-		print Fore.RED + 'Upgrade Option set' + Fore.RESET
-		threads = []
-		for host_name in hosts:
-			host = config['HOSTS'][host_name]['host_ref']
-			newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
-			
-		for thread in threads:
-			thread.join()
-			
-
+		do_upgrade()
 
 	total_runtime = time.time() - start_time
 	print Fore.BLUE + 'Total Runtime:' + str(datetime.timedelta(seconds=total_runtime)) + Fore.RESET
-			
-#TODO: ROOT_2 ignore install
+
 #TODO: optional / force format iscsi
-#TODO TO raise socket.error('Socket is closed')
-#TODO socket.error: Socket is closed
 # force noHA noyarnHA noyarn

@@ -69,7 +69,7 @@ Download the virtual python env containing all necessary scripts. Below is one t
 ##How to make ini file
 ```ini
 [HOSTS]
-iso_path = ( Values can be "nightly" or "http://station117_iso_path )
+iso_path = ( Values can be "nightly" or "http://station117_iso_path" )
 upgrade_img = ( If upgrade too will be done then give upgrade.img file )
 name_server = (DNS server 103.14.2.35 )
 release_ver = ( Its used as 

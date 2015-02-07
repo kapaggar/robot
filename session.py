@@ -3,6 +3,7 @@ import paramiko
 import string, re
 import time
 import traceback
+import socket
 import commands
 import os,sys
 import random
@@ -61,12 +62,9 @@ class session(object):
 				self.chan.set_combine_stderr(True)
 				return
 			except socket.error, (value,message):
-				if value == 61:
-					print 'SSH Connection refused, will retry in 5 seconds'
-					time.sleep(5)
-					retry += 1
-				else:
-					raise
+				print 'SSH Connection refused, will retry in 5 seconds'
+				time.sleep(5)
+				retry += 1
 			except paramiko.BadHostKeyException:
 				print "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host
 				print 'Edit that file to remove the entry and then hit return to try again'
@@ -217,7 +215,7 @@ class session(object):
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
 			return output
-		print "Was not able to run command on prompt=> %s"%prompt #Todo Raise exception"
+		print "Was not able to run command on prompt=> %s" % prompt #Todo Raise exception"
 			
 
 
@@ -279,7 +277,8 @@ class session(object):
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
 			return output
 
 
