@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-import os, sys, getopt
+import os, sys
 import time
+import signal
 import re
 import datetime
+import argparse
 from session import session
 from vm_node import vm_node
 from configobj import ConfigObj,flatten_errors
@@ -17,8 +19,7 @@ import threading
 ######################################################
 
 class Host(object):
-	re_pmxPrompt = re.compile( r"^(?P<pmxPrompt>pm\s+extension\s*>)\s*",re.M)    
-	
+
 	def __init__(self,config_ref,host):
 		self._ssh_session = None
 		self._name = host
@@ -46,7 +47,7 @@ class Host(object):
 	
 	def enableVirt(self):
 		output = ''
-		output += self._ssh_session.executeCli('virt enable')
+		output += self._ssh_session.executeCli('virt enable',wait=5)
 		return output
 	
 	def wipe_setup(self):
@@ -105,6 +106,10 @@ class Host(object):
 		output +=  self._ssh_session.run_till_prompt('reboot')
 		return output
 
+	def is_template_present(self):
+		output = ''
+		output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
+		
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
 			nightly_base_dir = self.config['HOSTS']['nightly_dir']
@@ -163,12 +168,12 @@ class Host(object):
 	
 	def startVMs(self):
 		for vm_name in self._vms:
-			vm = vm_node(self.config,self._name,vm_name)
+			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
 			print vm.power_on()
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
-			vm = vm_node(self.config,self._name,vm_name)
+			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
 			if vm.ssh_self():
 				print vm.image_fetch()
 				print vm.image_install()
@@ -199,17 +204,36 @@ def get_allvms(config):
 					tuples.append(host_section + ":" + vm_section)
 	return tuples
 
-def do_manufacture():
-	print Fore.RED + 'Manufacture Option Set' + Fore.RESET
-	threads = []
+def exit_cleanup(signal, frame):
+	print Fore.RED + 'Caught signal .. Cleaning Up' + Fore.RESET
 	for host_name in hosts:
-		host = config['HOSTS'][host_name]['host_ref']
-		newThread = threading.Thread(target=manufVMs, args = (host,))
-		newThread.start()
-		threads.append(newThread)
-	for thread in threads:
-		thread.join()
-		
+		if config['HOSTS'][host_name]['host_ref']:
+			host = config['HOSTS'][host_name]['host_ref']
+			for vm in host.get_vms() :
+				try:
+					vm_ref = config['HOSTS'][host][vm]['vm_ref']
+					del vm_ref
+				except Exception:
+					print "VM reference %s already clean"% host_name
+			try:
+				del config['HOSTS'][host_name]['host_ref']
+			except Exception:
+				print "Host reference %s already clean"% host_name
+			else:
+				print "host %s untouched"% host_name
+
+
+def do_manufacture():
+        print Fore.RED + 'Manufacture Option Set' + Fore.RESET
+        threads = []
+        for host_name in hosts:
+                host = config['HOSTS'][host_name]['host_ref']
+                newThread = threading.Thread(target=manufVMs, args = (host,))
+                newThread.start()
+                threads.append(newThread)
+        for thread in threads:
+                thread.join()
+
 def do_upgrade():
 	print Fore.RED + 'Upgrade Option set' + Fore.RESET
 	threads = []
@@ -222,8 +246,9 @@ def do_upgrade():
 def objectify_vms(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		vm = vm_node(config,host,vm_name)
-		config['HOSTS'][host][vm_name]['vm_ref'] = vm
+		if not config['HOSTS'][host][vm_name]['vm_ref']:
+			vm = vm_node(config,host,vm_name)
+			config['HOSTS'][host][vm_name]['vm_ref'] = vm
 
 def basic_settings(tuples):
 	for line in tuples:
@@ -293,37 +318,33 @@ def setupHDFS(tuples):
 		if vm.is_namenode():
 			if vm.ssh_self():
 				print vm.setup_HDFS()
-				
+
+def clear_ha(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode() != 1:
+			vm.unregisterNameNode()
+		if vm.is_clusternode():
+			vm.unregisterCluster()
+
 def manufVMs(host):
-	
+	time.sleep(1)
 	print host.enableVirt()
 	print host.synctime()
 	print host.setDNS()
-	print host.getMfgCd()
-	print host.delete_template()
-	print host.create_template()
+	if opt_lazy:
+		print "Skipping Template Creation. Exiting if not exists"
+		
+	else:
+		print host.getMfgCd()
+		print host.delete_template()
+		print host.create_template()
+	
 	print host.deleteVMs()
 	print host.declareVMs()
 	print host.instantiateVMs()
 	print host.startVMs()
-	
-def take_choice(argv):
-	global full_wipe
-	inputfile = ''
-	try:
-		opts, args = getopt.getopt(argv,"hi:w",["ifile="])
-	except getopt.GetoptError:
-		print 'Host.py -i <INI.File>'
-		sys.exit(2)
-	for opt, arg in opts:
-		if opt == '-h':
-			print 'Host.py -i <INI.File>'
-			sys.exit()
-		elif opt in ("-i", "--inifile"):
-			inputfile = arg
-		elif opt in ("--wipe"):
-			full_wipe = True
-	return inputfile
 
 def validate(config):
 	validator = Validator()
@@ -337,9 +358,6 @@ def validate(config):
 		print 'Config file %s validation failed!'% config_filename
 		sys.exit(1)
 
-
-
-
 '''
 Steps:
 1. Take Config as Input
@@ -352,13 +370,34 @@ Steps:
 8. On All VMs Setup Yarn config if present
 9. Connect to Hosts and upgrade VMs  ( parallely in threads - 1 per Host)
 '''
-
 if __name__ == '__main__':	
 	########################################################
 	#     MAIN
 	########################################################
-	full_wipe = False
-	config_filename = take_choice(sys.argv[1:])
+	signal.signal(signal.SIGINT,	exit_cleanup)
+	signal.signal(signal.SIGTERM,	exit_cleanup)
+	parser = argparse.ArgumentParser(description='Make Appliance setups from INI File' )
+	parser.add_argument("INIFILE",		nargs=1, 			type=str,		help='INI file to choose as Input')
+	parser.add_argument("--lazy",		dest='lazy',			action='store_true',	default=False,	help='Skip creating template. Use previous one')
+	parser.add_argument("--no-storage",	dest='storage',			action='store_false',	default=True,	help='Skip configuring stor n/w. Skip iscsi config')
+	parser.add_argument("--format",		dest='force_format',	action='store_true',	default=False,	help='Force format remote storage, override ini settings')
+	parser.add_argument("--no-format",	dest='force_format',	action='store_false',	default=False,	help='Don\'t format remote storage, override ini settings')
+	parser.add_argument("--no-ha",		dest='setup_ha',		action='store_false',	default=True,	help='skip configuring clustering.')
+	parser.add_argument("--no-hdfs",	dest='setup_hdfs',		action='store_false',	default=True,	help='skip configuring HDFS')
+	parser.add_argument("--wipe",		dest='wipe_host',		action='store_true',	default=False,	help='First delete Host VM-Pool')
+	parser.add_argument("--skip-vm",	nargs='+',				dest='skip_vm',			type=str,		help='TOBE_IMPLEMENTED skip vm in ini with these names')
+
+	args = parser.parse_args()
+	config_filename = args.INIFILE[0]
+	opt_format 		= args.force_format
+	opt_storage		= args.storage
+	opt_ha			= args.setup_ha
+	opt_hdfs		= args.setup_hdfs
+	opt_wipe		= args.wipe_host
+	opt_skipvm		= args.skip_vm
+	opt_lazy		= args.lazy
+	allvms = None
+
 	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
 	
@@ -382,9 +421,14 @@ if __name__ == '__main__':
 	basic_settings(allvms)
 	generate_keys(allvms)
 	shareKeys(allvms)
-	setupClusters(allvms)
-	setupStorage(allvms)
-	setupHDFS(allvms)
+	if opt_ha is True:
+		setupClusters(allvms)
+	else:
+		clear_ha(allvms) # Remove Clustering config nodes & convert NameNode2 config node to dataNode
+	if opt_storage is True:
+		setupStorage(allvms)
+	if opt_hdfs is True:
+		setupHDFS(allvms)
 	
 	manuf_runtime = time.time() - start_time
 	print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET

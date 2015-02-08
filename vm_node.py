@@ -19,15 +19,15 @@ class vm_node(object):
 	re_ssh_pubkey = re.compile( r"^(?P<pubkey>ssh-dss\s+\S+)",re.M)
 
 	def __init__(self,config,host,vm):
-		self._name = vm
-		self._host = host
-		self._ssh_session = None
-		self._dsakey = None
-		self._mgmtMac = self.randomMAC()
-		self._storMac = self.randomMAC()
-		self._hostid = self.hostid_generator()
-		self._diskimageFull = "/data/virt/pools/default/%s.img" % self._name
-		self._diskimage = "%s.img" % self._name
+		self._name 					= vm
+		self._host 					= host
+		self._ssh_session 			= None
+		self._dsakey 				= None
+		self._mgmtMac 				= self.randomMAC()
+		self._storMac 				= self.randomMAC()
+		self._hostid 				= self.hostid_generator()
+		self._diskimageFull 		= "/data/virt/pools/default/%s.img" % self._name
+		self._diskimage 			= "%s.img" % self._name
 		self._ntpserver				= config['HOSTS']['ntp_server']
 		self._name_server			= config['HOSTS']['name_server']
 		self._snmpsink				= config['HOSTS']['snmpsink_server']
@@ -57,18 +57,76 @@ class vm_node(object):
 		self._memory				= config['HOSTS'][host][vm]['memory']
 		self.config_ref				= config
 		if self._namenode:
-			self.name_nodes.append(self._name)
+			self.registerNameNode()
 		elif self._journalnode:
-			self.journal_nodes.append(self._name)
+			self.registerJournalNode()
 		else:
-			self.data_nodes.append(self._name)
+			self.registerDataNode()
 
+	def __del__(self):
+		if self._ssh_session != None:
+			self._ssh_session.close()
+
+	def _set_clusterName(self):
+		if self._clusterVIP :
+			return str(self.dottedQuadToNum(self._clusterVIP))
+		else:
+			print "Raise Exception..not a clusterNode still you are asking clusterName"
+
+	def _get_loop_device(self):
+		result = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
+		next_loop_device = "".join(result.split())
+		try:
+			if "/dev/" in next_loop_device:
+				return next_loop_device
+		except Exception :
+				print ("Unable to get a free loop device on Host")
+				return False
+
+	def registerNameNode(self):
+		self.name_nodes.append(self._name)
+		
+	def unregisterNameNode(self):
+		self.name_nodes.remove(self._name)
+		self._namenode = None
+		self.config_ref['HOSTS'][host][vm]['name_node'] = None
+	
+	def registerJournalNode(self):
+		self.journal_nodes.append(self._name)
+	
+	def unregisterJournalNode(self):
+		self.journal_nodes.remove(self._name)
+		self._journalnode = None
+		self.config_ref['HOSTS'][host][vm]['journal_node'] = None
+		
+	def registerDataNode(self):
+		self.data_nodes.append(self._name)
+
+	def unregisterDataNode(self):
+		self.data_nodes.remove(self._name)
+		
+	def unregisterCluster(self):
+		self._clusterVIP = None
+		self.config_ref['HOSTS'][host][vm]['cluster_vip'] = None
+	
+	def is_clusternode(self):
+		if self._clusterVIP is not None:
+			return True
+		else:
+			return False
+
+	def is_namenode(self):
+		if self._namenode:
+			return True
+		else:
+			return False
+	
 	def getName():
 			return self._name
-			
+
 	def getIP():
 			return self._ip
-			
+
 	def getDiskimage():
 			return self._diskimageFull
 
@@ -297,18 +355,6 @@ class vm_node(object):
 		output = ''
 		output += self._ssh_session.executeCli('logging files rotation force')
 		return output
-
-	def is_clusternode(self):
-		if self._clusterVIP is not None:
-			return True
-		else:
-			return False
-
-	def is_namenode(self):
-		if self._namenode:
-			return True
-		else:
-			return False
 	
 	def setSnmpServer(self):
 		output = ''
@@ -481,21 +527,6 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
 		return output
 	
-	def _set_clusterName(self):
-		if self._clusterVIP :
-			return str(self.dottedQuadToNum(self._clusterVIP))
-		else:
-			print "Raise Exception..not a clusterNode still you are asking clusterName"
-
-	def _get_loop_device(self):
-		result = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
-		next_loop_device = "".join(result.split())
-		try:
-			if "/dev/" in next_loop_device:
-				return next_loop_device
-		except Exception :
-				print ("Unable to get a free loop device on Host")
-				return False
 
 
 if __name__ == '__main__':

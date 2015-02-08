@@ -15,28 +15,28 @@ from validate import Validator
 class session(object):
 	#    re_newlines = re.compile(r'[\n|\r]', re.UNICODE + re.I + re.M)
 	#    re_color_codes = re.compile(r'(\[0m)|(\[0\d\;\d{2}m)', re.UNICODE)
-	re_loginPrompt = re.compile( r"^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",re.M)
-	re_enPrompt = re.compile( r"^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+#)\s*",re.M)
-	re_cliPrompt = re.compile( r"^(?P<cliPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+\(config\)\s+#)\s*",re.M)
-	re_shellPrompt = re.compile( r"^(?P<shellPrompt>\[\S+@\S+\s+\S+\]\s*#)\s*",re.M)
-	re_pmxPrompt = re.compile( r"^(?P<pmxPrompt>pm\s+extension\s*>)\s*",re.M)    
+	re_loginPrompt 	= re.compile( r"^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",re.M)
+	re_enPrompt 	= re.compile( r"^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+#)\s*",re.M)
+	re_cliPrompt 	= re.compile( r"^(?P<cliPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+\(config\)\s+#)\s*",re.M)
+	re_shellPrompt 	= re.compile( r"^(?P<shellPrompt>\[\S+@\S+\s+\S+\]\s*#)\s*",re.M)
+	re_pmxPrompt 	= re.compile( r"^(?P<pmxPrompt>pm\s+extension\s*>)\s*",re.M)    
 
 	def __init__(self, host=None, username=None, password=None):
-		self._host = host
-		self._username = username
-		self._password = password
-		self._session = None
-		self._stdin = None
-		self._stdout = None
-		self._stderr = None
-		self.loginPrompt = None
-		self.enPrompt = None
-		self.cliPrompt  = None
-		self.pmxPrompt = None
-		self.shellPrompt = None
-		self.currentPrompt = None
-		self.newline = "\n"
-		self.current_send_string = ''
+		self._host 					= host
+		self._username 				= username
+		self._password 				= password
+		self._session 				= None
+		self._stdin 				= None
+		self._stdout 				= None
+		self._stderr 				= None
+		self.loginPrompt 			= None
+		self.enPrompt 				= None
+		self.cliPrompt  			= None
+		self.pmxPrompt 				= None
+		self.shellPrompt 			= None
+		self.currentPrompt 			= None
+		self.newline 				= "\n"
+		self.current_send_string	= ''
 		if host and username and password:
 			self.connect()
 			#self.checkPrompts()
@@ -148,27 +148,15 @@ class session(object):
 			BuiltIn().fail(errorMsg)
 			return False
 
-	def checkPrompts(self):
-		self.write("enable\n")
-		buff = self.read()
-		buff = buff.splitlines()[-1]
-		self.enPrompt =  buff
-		self.loginPrompt =  self.enPrompt.replace("#",">")         
-		self.write("configure terminal\n")
-		buff = self.read()
-		buff = buff.splitlines()[-1]
-		self.cliPrompt =  buff         
-		self.write("_exec bash\n")
-		buff = self.read()
-		buff = buff.splitlines()[-1]
-		self.write("exit\n")
-		self.shellPrompt =  buff         
-		self.write("pmx\n")
-		buff = self.read()
-		buff = buff.splitlines()[-1]
-		self.pmxPrompt =  buff
-		#print "buff = %s , self.pmxPrompt %s" % (buff, self.pmxPrompt)
-		self.write("quit")
+	def checkFileExist(self,filenameFullPath):
+		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
+		output= self.executeShell(command).split("\n")[-1]
+		if output == "File exists":
+			trace.info("File '%s' exists"%filenameFullPath)
+			return True
+		else:
+			trace.trace("File '%s' doesn't exists"%filenameFullPath)
+		return False 
 
 	def getPrompt(self):
 		got_prompt = False
@@ -215,9 +203,7 @@ class session(object):
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
 			return output
-		print "Was not able to run command on prompt=> %s" % prompt #Todo Raise exception"
-			
-
+		print "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host) #Todo Raise exception"
 
 	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
 		cmds = self._cmd_fix_input_data(cmd)
@@ -281,6 +267,27 @@ class session(object):
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
 			return output
 
+	def executeShell(self,cmd):
+		output = ''
+		prompt = self.getPrompt()
+		if prompt == "cli":
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
+			return output
+		elif prompt == "shell":
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			return output
+		elif prompt == "pmx":
+			output = self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			return output
+		elif prompt == "login":
+			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
+			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
+			return output
 
 	def write(self, cmd):
 		timeOut = 60
