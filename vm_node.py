@@ -89,7 +89,7 @@ class vm_node(object):
 	def unregisterNameNode(self):
 		self.name_nodes.remove(self._name)
 		self._namenode = None
-		self.config_ref['HOSTS'][host][vm]['name_node'] = None
+		self.config_ref['HOSTS'][self._host][self._name]['name_node'] = None
 	
 	def registerJournalNode(self):
 		self.journal_nodes.append(self._name)
@@ -97,7 +97,7 @@ class vm_node(object):
 	def unregisterJournalNode(self):
 		self.journal_nodes.remove(self._name)
 		self._journalnode = None
-		self.config_ref['HOSTS'][host][vm]['journal_node'] = None
+		self.config_ref['HOSTS'][self._host][self._name]['journal_node'] = None
 		
 	def registerDataNode(self):
 		self.data_nodes.append(self._name)
@@ -107,7 +107,7 @@ class vm_node(object):
 		
 	def unregisterCluster(self):
 		self._clusterVIP = None
-		self.config_ref['HOSTS'][host][vm]['cluster_vip'] = None
+		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
 	
 	def is_clusternode(self):
 		if self._clusterVIP is not None:
@@ -117,7 +117,7 @@ class vm_node(object):
 
 	def is_namenode(self):
 		if self._namenode:
-			return True
+			return self._namenode
 		else:
 			return False
 	

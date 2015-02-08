@@ -323,8 +323,12 @@ def clear_ha(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.is_namenode() != 1:
+		"""
+		The logic for below could be wrong.. Double Check
+		"""
+		if vm.is_namenode() == 2 :   
 			vm.unregisterNameNode()
+			vm.registerDataNode()
 		if vm.is_clusternode():
 			vm.unregisterCluster()
 
@@ -377,15 +381,55 @@ if __name__ == '__main__':
 	signal.signal(signal.SIGINT,	exit_cleanup)
 	signal.signal(signal.SIGTERM,	exit_cleanup)
 	parser = argparse.ArgumentParser(description='Make Appliance setups from INI File' )
-	parser.add_argument("INIFILE",		nargs=1, 			type=str,		help='INI file to choose as Input')
-	parser.add_argument("--lazy",		dest='lazy',			action='store_true',	default=False,	help='Skip creating template. Use previous one')
-	parser.add_argument("--no-storage",	dest='storage',			action='store_false',	default=True,	help='Skip configuring stor n/w. Skip iscsi config')
-	parser.add_argument("--format",		dest='force_format',	action='store_true',	default=False,	help='Force format remote storage, override ini settings')
-	parser.add_argument("--no-format",	dest='force_format',	action='store_false',	default=False,	help='Don\'t format remote storage, override ini settings')
-	parser.add_argument("--no-ha",		dest='setup_ha',		action='store_false',	default=True,	help='skip configuring clustering.')
-	parser.add_argument("--no-hdfs",	dest='setup_hdfs',		action='store_false',	default=True,	help='skip configuring HDFS')
-	parser.add_argument("--wipe",		dest='wipe_host',		action='store_true',	default=False,	help='First delete Host VM-Pool')
-	parser.add_argument("--skip-vm",	nargs='+',				dest='skip_vm',			type=str,		help='TOBE_IMPLEMENTED skip vm in ini with these names')
+	parser.add_argument("INIFILE",
+						nargs=1,
+						type=str,
+						help='INI file to choose as Input')
+	parser.add_argument("--lazy",
+						dest='lazy',
+						action='store_true',
+						default=False,
+						help='Skip creating template. Use previous one')
+	parser.add_argument("--reconfig",
+						dest='reconfig',
+						action='store_true',
+						default=False,
+						help='Skip manuf. VMS . Just factory revert and apply INI')
+	parser.add_argument("--no-storage",
+						dest='storage',
+						action='store_false',
+						default=True,
+						help='Skip iscsi config and remote storage')
+	parser.add_argument("--format",
+						dest='force_format',
+						action='store_true',
+						default=False,
+						help='Force format remote storage, override ini settings')
+	parser.add_argument("--no-format",
+						dest='force_format',
+						action='store_false',
+						default=False,
+						help='Don\'t format remote storage, override ini settings')
+	parser.add_argument("--no-ha",
+						dest='setup_ha',
+						action='store_false',
+						default=True,
+						help='skip configuring clustering.')
+	parser.add_argument("--no-hdfs",
+						dest='setup_hdfs',
+						action='store_false',
+						default=True,
+						help='skip configuring HDFS')
+	parser.add_argument("--wipe",
+						dest='wipe_host',
+						action='store_true',
+						default=False,
+						help='First delete Host VM-Pool')
+	parser.add_argument("--skip-vm",
+						nargs='+',
+						dest='skip_vm',
+						type=str,
+						help='TOBE_IMPLEMENTED skip vm in ini with these names')
 
 	args = parser.parse_args()
 	config_filename = args.INIFILE[0]
@@ -396,6 +440,7 @@ if __name__ == '__main__':
 	opt_wipe		= args.wipe_host
 	opt_skipvm		= args.skip_vm
 	opt_lazy		= args.lazy
+	opt_reconfig	= args.reconfig
 	allvms = None
 
 	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
@@ -413,7 +458,8 @@ if __name__ == '__main__':
 	connect_hosts(hosts)
 
 	if 'manufacture' in install_type:
-		do_manufacture()
+		if not opt_reconfig:
+			do_manufacture()
 
 	allvms = get_allvms(config)
 	objectify_vms(allvms)

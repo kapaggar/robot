@@ -32,6 +32,7 @@ cluster_vip = ip_addr(default = None)
 name_node = integer(default = None)
 journal_node =  integer(min=1, max=6, default=None)
 cluster_name = string(default = None)
+vm_ref = string(default=None)
 
 [[[[storage]]]]
 initiatorname_iscsi = string(default = None)
