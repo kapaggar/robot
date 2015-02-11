@@ -430,9 +430,14 @@ class vm_node(object):
 
 	def format_storage(self):
 		output = ''
+		format_option = ""
+		global_format_forced = self.config_ref['HOSTS']['force_format']
+		if global_format_forced:
+			format_option += "no-strict"
+			
 		for fs_name in self._tps_fs.keys():
-			format_option = self._tps_fs[fs_name]['format']
-			if format_option is False:
+			ini_format_option = self._tps_fs[fs_name]['format']
+			if ini_format_option is False:
 				return
 			
 			count = 10
@@ -441,7 +446,7 @@ class vm_node(object):
 				current_multipaths = self._ssh_session.executeCli('tps multipath show')
 				output +=  Fore.BLUE + current_multipaths + Fore.RESET
 				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('tps fs format wwid %s no-strict label %s' %(wwid,fs_name),wait=30)
+					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' %(wwid,format_option,fs_name),wait=30)
 					output += full_output.splitlines()[-1]
 					break
 				elif wwid not in current_multipaths:

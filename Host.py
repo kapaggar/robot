@@ -31,6 +31,12 @@ class Host(object):
 		if self._ssh_session != None:
 			self._ssh_session.close()
 
+	def getname(self):
+		return self._name
+
+	def getip(self):
+		return self._ip
+
 	def connectSSH(self):
 		self._ssh_session = session(self._ip, self._username, self._password)
 		self.config['HOSTS'][self._name]['ssh_session'] = self._ssh_session
@@ -99,7 +105,11 @@ class Host(object):
 
 	def is_template_present(self):
 		output = ''
-		output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
+		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._template_file)
+		if "No such file or directory" in output:
+			return False
+		else :
+			return True
 		
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :

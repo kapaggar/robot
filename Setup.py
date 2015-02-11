@@ -142,7 +142,8 @@ def setupStorage(tuples):
 		if vm.ssh_self():
 			if vm.has_storage():
 				print vm.bring_storage()
-				print vm.format_storage()
+				if not opt_skip_format :
+					print vm.format_storage()
 				print vm.mount_storage()
 				print vm.config_write()
 
@@ -174,8 +175,8 @@ def manufVMs(host):
 	print host.synctime()
 	print host.setDNS()
 	if opt_lazy:
-		print "Skipping Template Creation. Exiting if not exists"
-		
+		if not host.is_template_present():
+			sys.exit( "Template missing in host %s" % host.getname())
 	else:
 		print host.getMfgCd()
 		print host.delete_template()
@@ -236,9 +237,14 @@ if __name__ == '__main__':
 						action='store_false',
 						default=True,
 						help='Skip iscsi config and remote storage')
+	parser.add_argument("--force-format",
+						dest='force_format',
+						action='store_true',
+						default=False,
+						help='Format Volumes, Even if Filesystem present "no-strict"')
 	parser.add_argument("--no-format",
 						dest='skip_format',
-						action='store_false',
+						action='store_true',
 						default=False,
 						help='Don\'t format remote storage, override ini settings')
 	parser.add_argument("--no-ha",
@@ -264,7 +270,8 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	config_filename = args.INIFILE[0]
-	opt_format 		= args.skip_format
+	opt_skip_format = args.skip_format
+	opt_force_format= args.force_format
 	opt_storage		= args.storage
 	opt_ha			= args.setup_ha
 	opt_hdfs		= args.setup_hdfs
@@ -282,6 +289,12 @@ if __name__ == '__main__':
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
+	
+	if opt_force_format:
+		config['HOSTS']['force_format'] = True
+	else:
+		config['HOSTS']['force_format'] = False
+		
 	start_time = time.time()
 	
 	#Setup Hosts Connectivity 
