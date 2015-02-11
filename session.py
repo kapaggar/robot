@@ -283,7 +283,6 @@ class session(object):
 			return output
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
-			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)

@@ -72,7 +72,7 @@ Download the virtual python env containing all necessary scripts. Below is one t
 iso_path = ( Values can be "nightly" or "http://station117_iso_path" )
 upgrade_img = ( If upgrade too will be done then give upgrade.img file )
 name_server = (DNS server 103.14.2.35 )
-release_ver = ( Its used as 
+release_ver = ( Its used as marking comment for the VM in Host..shows up in "show virt vm" )
 install_type = ( Values can be manufacture , upgrade OR manufacture+upgrade )
 ntp_server = (Values can be any ntp server default is 198.55.111.5 )
 yarn_nameservice = (String that would be used as yarn_name_service )
@@ -82,6 +82,9 @@ snmpsink_server = ( SNMP Sink for the whole setup )
         ip = (Value is HOST-IP )
         username = ( username for host eg. admin )
         password = ( password for host eg. admin@123)
+	brMgmt = Name of the management bridge on Host (default = mgmt)
+	brStor = Name of the Storage bridge (default = stor)
+	template_file = If in any rare circustance you want to change the name of template file used (default = /data/virt/pools/default/template.img )
 
                 [[[five-one]]]   <== Choose any name for VM, used as host-name inside VMs , hence be unique.
                 mgmt_ip = 192.168.NN.NN
