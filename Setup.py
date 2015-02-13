@@ -186,6 +186,10 @@ def manufVMs(host):
 	print host.declareVMs()
 	print host.instantiateVMs()
 	print host.startVMs()
+	
+def get_system_date():
+	now = time.strftime("%c")
+	return now
 
 def validate(config):
 	validator = Validator()
@@ -286,6 +290,8 @@ if __name__ == '__main__':
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
+	if opt_skip_format and opt_force_format :
+		print "No-Format and force format cannot be used together."
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
@@ -333,4 +339,5 @@ if __name__ == '__main__':
 # Debug Command
 # pydbgp -d localhost:9001  Host.py  INIFILE
 # Validate iso and img files are present and are iso & image files
-
+# validate other config.spec parameters.
+# Write message . log . info generic logging moduli in common library

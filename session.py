@@ -167,8 +167,11 @@ class session(object):
 			lines = buff.splitlines()
 			if len(lines) > 0:
 				buff = lines[-1]
-				got_prompt = True
-				break
+				if buff and not buff.isspace():   # the string is non-empty
+					got_prompt = True
+					break
+				else :
+					timeOut = timeOut - 1
 			else :
 				timeOut = timeOut - 1
 		try:
