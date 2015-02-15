@@ -9,7 +9,7 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from colorama import Fore
+from colorama import Fore, Back, Style
 from pprint import pprint
 import threading
 
@@ -191,6 +191,61 @@ def get_system_date():
 	now = time.strftime("%c")
 	return now
 
+def message(message_string,arg_ref):
+	if arg_ref['style'] and re.match("^ok$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_ok()
+		+ message_string
+		
+	if arg_ref['style'] and re.match("^nok$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_nok()
+		+ message_string
+		
+	if arg_ref['style'] and re.match("^info$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_info()
+		+ message_string
+		
+	if arg_ref['style'] and re.match("^warning$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_warning()
+		+ message_string
+		
+	if arg_ref['style'] and re.match("^debug$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_debug()
+		+ message_string
+		
+	if arg_ref['style'] and re.match("^fatal$",arg_ref['style'], re.IGNORECASE):
+		message_string = sprintf_fatal()
+		+ message_string
+		
+	if arg_ref['to_stdout']:
+		print message_string
+	if arg_ref['to_log']:
+		append_to_log ( sprintf_timestamped ( message_string ) )
+
+
+def sprintf_timestamped(string):
+	timestamped_string = ''
+	chomp(string);
+	strings = string.split()
+	chomp(strings)
+	for line in strings:
+		timestamped_string += time.time().strftime("%b %e %H:%M:%S %Y: $line\n")
+	return timestamped_string
+
+def sprintf_ok():
+    return Fore.WHITE +	Back.GREEN +	Style.BRIGHT +	"OK" + Fore.RESET + Back.RESET + Style.RESET_ALL
+def sprintf_nok():
+    return Fore.WHITE +	Back.RED +		Style.BRIGHT +	"NOK" + Fore.RESET + Back.RESET + Style.RESET_ALL
+def sprintf_info():
+    return Fore.WHITE +	Back.BLUE +		Style.DIM +		"INFO" + Fore.RESET + Back.RESET + Style.RESET_ALL
+def sprintf_warning():
+    return Fore.CYAN +	Back.BLUE +		Style.BRIGHT +	"WARN" + Fore.RESET + Back.RESET + Style.RESET_ALL
+def sprintf_debug():
+    return Fore.YELLOW +	Back.BLUE +	Style.DIM +		"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL
+def sprintf_fatal():
+    return Fore.GREEN +	Back.BLUE +		Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL
+
+
+
 def validate(config):
 	validator = Validator()
 	results = config.validate(validator)
@@ -226,6 +281,10 @@ if __name__ == '__main__':
 						nargs=1,
 						type=str,
 						help='INI file to choose as Input')
+	parser.add_argument("-l","--log",
+						nargs=1,
+						type=str,
+						help='Custom logfile name. default is script.PID.log( DoesNOT redirects stdout)')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',
@@ -285,13 +344,22 @@ if __name__ == '__main__':
 	opt_reconfig	= args.reconfig
 	allvms = None
 
+	if args.log is not None:
+		logfile_name = args.log
+	else:
+		logfile_name = os.path.basename(__file__) + os.getpid() + ".log"
+		
 	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
 	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
 	if opt_skip_format and opt_force_format :
-		print "No-Format and force format cannot be used together."
+		print "No-Format and force format options cannot be used together."
+	if opt_wipe and opt_lazy :
+		print "Wipe and Lazy options cannot be used together."
+	if opt_wipe and opt_reconfig:
+		print "Wipe and Reconfig cannot be used together."
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
@@ -338,6 +406,9 @@ if __name__ == '__main__':
 
 # Debug Command
 # pydbgp -d localhost:9001  Host.py  INIFILE
+
+#TODO
+# Exception if there is one "virt volume fetch url" already running on Host system
 # Validate iso and img files are present and are iso & image files
 # validate other config.spec parameters.
 # Write message . log . info generic logging moduli in common library
