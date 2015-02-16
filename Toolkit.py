@@ -94,9 +94,8 @@ def sprintf_unknown():
     return Fore.WHITE +	Back.BLACK +	Style.NORMAL +	"UNKNOWN" + Fore.RESET + Back.RESET + Style.RESET_ALL	+ " : "
 
 def sprintf_nocolor(string):
-	ansi_escape = re.compile("\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]", re.UNICODE,re.DOTALL)
-	ansi_escape.sub('', string)
-	return string
+	regex = re.compile(ur'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]', re.UNICODE)
+	return re.sub(regex,"", string)
 
 def get_system_date():
 	now = time.strftime("%c")

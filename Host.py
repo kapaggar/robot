@@ -164,27 +164,28 @@ class Host(object):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
-		return 
+		return "Success"
 	
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			print vm.clone_volume()
-			print vm.configure()
-			print vm.set_mfgdb()
+			message ( "Clone-Volume_Output = %s " % vm.clone_volume()	, {'style': 'INFO'} )
+			message ( "VM-Configure_Output = %s " % vm.configure()		, {'style': 'INFO'} )
+			message ( "VM-SetMfgDB_Output = %s " % vm.set_mfgdb()		, {'style': 'INFO'} )
+
 	
 	def startVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			print vm.power_on()
+			message ( "VM-Poweron= %s " % vm.poweron()					, {'style': 'INFO'} )
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
 			if vm.ssh_self():
-				print vm.image_fetch()
-				print vm.image_install()
-				print vm.reload()
-				
+				message ( "VM-Fetch		= %s " % vm.image_fetch()		, {'style': 'INFO'} )
+				message ( "VM-Install	= %s " % vm.image_install()		, {'style': 'INFO'} )
+				message ( "VM-Reload	= %s " % vm.reload()			, {'style': 'INFO'} )
+
 if __name__ == '__main__':
 	pass

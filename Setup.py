@@ -59,6 +59,7 @@ def wipe_vmpool(hosts):
 	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} ) 
 	for host_name in hosts:
 		host = config['HOSTS'][host_name]['host_ref']
+		message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
 		print host.wipe_setup()
 	return "Success"
 
@@ -364,7 +365,7 @@ if __name__ == '__main__':
 
 
 # Debug Command
-# pydbgp -d localhost:9001  Host.py  INIFILE
+# pydbgp -d localhost:9001  Setup.py  INIFILE
 
 #TODO
 # Exception if there is one "virt volume fetch url" already running on Host system

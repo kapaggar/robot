@@ -62,7 +62,7 @@ class session(object):
 				self.chan.set_combine_stderr(True)
 				return
 			except socket.error, (value):
-				message ( "SSH Connection refused, will retry in 5 seconds", {'to_log':'1' , 'style': 'WARN'} )
+				message ( "SSH Connection refused, will retry in 5 seconds", {'to_log':'1' , 'style': 'WARNING'} )
 				time.sleep(5)
 				retry += 1
 			except paramiko.BadHostKeyException:
@@ -71,7 +71,7 @@ class session(object):
 				rawinput('Hit Enter when ready')
 				retry += 1
 			except EOFError:
-				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', {'to_log':1 , 'style': 'WARN'} ) 
+				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', {'to_log':1 , 'style': 'WARNING'} ) 
 				time.sleep(5)
 				retry += 1
 				message ( 'Could not establish SSH connection', {'to_log':1 , 'style': 'FATAL'} ) 

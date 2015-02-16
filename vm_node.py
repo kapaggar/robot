@@ -6,8 +6,6 @@ import traceback
 import commands
 import os,sys
 import random
-from colorama import Fore
-from pprint import pprint
 from session import session
 from Toolkit import message
 
@@ -72,7 +70,7 @@ class vm_node(object):
 		if self._clusterVIP :
 			return str(self.dottedQuadToNum(self._clusterVIP))
 		else:
-			print "Raise Exception..not a clusterNode still you are asking clusterName"
+			message ( "Raise Exception..not a clusterNode still you are asking clusterName", {'style': 'FATAL'} )
 
 	def _get_loop_device(self):
 		result = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
@@ -81,7 +79,7 @@ class vm_node(object):
 			if "/dev/" in next_loop_device:
 				return next_loop_device
 		except Exception :
-				print ("Unable to get a free loop device on Host")
+				message ( "Unable to get a free loop device on Host", {'style': 'FATAL'} )
 				return False
 
 	def registerNameNode(self):
@@ -168,7 +166,7 @@ class vm_node(object):
 			else:
 				return False
 		except Exception:
-			print ("error matching varOffset in %s" % self._diskimageFull )
+			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
 			return False
 		
 		offset_bytes = int(var_offset) * 512
@@ -241,7 +239,7 @@ class vm_node(object):
 				return True
 			return False
 		except Exception:
-			print "cannot run ping"
+			message ( "Canot Ping host %s" % host , {'style': 'FATAL'} )
 			return False
 
 	def ssh_self(self):
@@ -250,11 +248,15 @@ class vm_node(object):
 			timeOut = 600
 			while timeOut > 0:
 				if self.pingable(self._ip):
-					#print("VM %s responds with ping" %self._name)
+					message ( "VM %s responds from %s "%(self._name,self._ip),
+							 {'to_stdout':0,'style': 'DEBUG'}
+							 )
 					vm_up = True
 					break
 				else:
-					#print("Waiting for VM %s %s to come up, sleeping for 10 seconds"%(self._name,self._ip))
+					message ( "Waiting for VM %s %s to come up, sleeping for 10 seconds"%(self._name,self._ip),
+							 {'to_stdout':0,'style': 'DEBUG'}
+							 )
 					time.sleep(10)
 					timeOut = timeOut - 10        
 			if vm_up :
@@ -267,7 +269,9 @@ class vm_node(object):
 				self._ssh_session = session(host=self._ip, username="admin" , password="admin@123")
 				return self._ssh_session
 			else :
-				print "Should return exception that SSH connection can;t be made to the VM"  
+				message ( "Exception that SSH connection can;t be made to the VM"  ,
+						 {'to_stdout':1,'style': 'FATAL'}
+						 )
 				return False
 		elif  self._ssh_session :
 			return self._ssh_session
@@ -447,13 +451,14 @@ class vm_node(object):
 				current_multipaths = self._ssh_session.executeCli('tps multipath show')
 				output +=  Fore.BLUE + current_multipaths + Fore.RESET
 				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' %(wwid,format_option,fs_name),wait=30)
+					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
 					output += full_output.splitlines()[-1]
 					break
 				elif wwid not in current_multipaths:
 					count = count - 1
 					output += self._ssh_session.executeCli('tps multipath show')
-					print ("waiting for %s lun with wwid=%s to come in multipath. retrying .."%(fs_name,wwid))
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
+							 {'style': 'INFO'} )
 					time.sleep(1)
 					continue
 		return output
