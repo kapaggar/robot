@@ -9,6 +9,7 @@ import random
 from colorama import Fore
 from pprint import pprint
 from session import session
+from Toolkit import message
 
 class vm_node(object):
 	nodes_ip = {}

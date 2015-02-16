@@ -9,7 +9,7 @@ import os,sys
 import random
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-
+from Toolkit import message
 
 
 class session(object):
@@ -61,20 +61,20 @@ class session(object):
 				self.chan.settimeout(1200)
 				self.chan.set_combine_stderr(True)
 				return
-			except socket.error, (value,message):
-				print 'SSH Connection refused, will retry in 5 seconds'
+			except socket.error, (value):
+				message ( "SSH Connection refused, will retry in 5 seconds", {'to_log':'1' , 'style': 'WARN'} )
 				time.sleep(5)
 				retry += 1
 			except paramiko.BadHostKeyException:
-				print "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host
-				print 'Edit that file to remove the entry and then hit return to try again'
+				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, {'to_log':1 , 'style': 'FATAL'} ) 
+				message ( 'Edit that file to remove the entry and then hit return to try again', {'to_log':1 , 'style': 'DEBUG'} ) 
 				rawinput('Hit Enter when ready')
 				retry += 1
 			except EOFError:
-				print 'Unexpected Error from SSH Connection, retrying in 5 seconds'
+				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', {'to_log':1 , 'style': 'WARN'} ) 
 				time.sleep(5)
 				retry += 1
-				print 'Could not establish SSH connection'
+				message ( 'Could not establish SSH connection', {'to_log':1 , 'style': 'FATAL'} ) 
 
 	def close(self):
 		self.chan.close()
@@ -90,7 +90,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			print "error matching getLoginPrompt"
+			message ( "Error matching getLoginPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 			
 	def getenPrompt(self,line):
@@ -102,7 +102,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			print "error matching getLoginPrompt"
+			message ( "error matching getenPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
 	def getcliPrompt(self,line):
@@ -114,7 +114,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			print "error matching getLoginPrompt"
+			message ( "error matching getcliPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 		
 	def getshellPrompt(self,line):
@@ -126,7 +126,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			print "error matching getLoginPrompt"
+			message ( "error matching getshellPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
 	def tellPrompt(self,line):
@@ -179,7 +179,7 @@ class session(object):
 				prompt = self.tellPrompt(buff) 
 				return prompt   
 		except Exception:
-			print "Unable to reach a Prompt"
+			message ( "Unable to reach a Prompt in getPrompt", {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
 	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1):
@@ -206,15 +206,20 @@ class session(object):
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
 			return output
-		print "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host) #Todo Raise exception"
+		#Todo Raise exception"
+		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),
+				 {'to_log':1 , 'style': 'FATAL'}
+				 ) 
+
 
 	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
 		cmds = self._cmd_fix_input_data(cmd)
 		for lines in cmds:
 			 self.write(lines)
 			 time.sleep(0.5)
-		print ("sent command => \"%s\" on remote-host %s" %( cmd,self._host))
-		 
+		message ( "sending => \"%s\" on remote-host %s" %( cmd,self._host),
+				 {'to_stdout':1, 'to_log':1 , 'style': 'OK'}
+				 ) 
 		data = ''
 		output = ''
 		lastline = ''
@@ -228,12 +233,14 @@ class session(object):
 			else:
 					 output += data
 			#debug
-			#print lastline
 			lines =  data.splitlines()
 			if len(lines) > 0 :
 				lastline = lines[-1]
 			else:
-				return "Client Disconnected" #May be shell exited abruptly
+				message ( "Client Disconnected",
+						 {'to_stdout':1, 'to_log':1 , 'style': 'NOK'}
+						 ) 
+				return False #May be shell exited abruptly
 			if isinstance(prompt,re._pattern_type):
 				if prompt.match(lastline):
 					output = re.sub(prompt,'',output)
@@ -307,7 +314,9 @@ class session(object):
 			if sent_data:
 				return True
 		except Exception:
-			print "Unable to write cmd %s to Channel (Channel not Ready)"%cmd
+			message ( "Unable to write cmd %s to Channel (Channel not Ready)"%cmd,
+					 {'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}
+					 ) 
 			return False
 
 
@@ -327,7 +336,9 @@ class session(object):
 			if got_data:
 				return data
 		except Exception:
-			print "Unable to read from channel"
+			message ( "Unable to read from channel" ,
+					 {'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}
+					 ) 
 			return False
 
 	def read_all(self):

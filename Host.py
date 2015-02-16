@@ -2,6 +2,7 @@
 import re
 from session import session
 from vm_node import vm_node
+from Toolkit import message
 from urlgrabber import urlopen,grabber
 from os.path import basename
 
@@ -163,6 +164,7 @@ class Host(object):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
+		return 
 	
 	def instantiateVMs(self):
 		for vm_name in self._vms:

@@ -9,8 +9,7 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from colorama import Fore, Back, Style
-from pprint import pprint
+from Toolkit import message
 import threading
 
 def connect_hosts (hosts):
@@ -18,6 +17,7 @@ def connect_hosts (hosts):
 		host = Host(config,host_name)
 		config['HOSTS'][host_name]['host_ref'] = host
 		host.connectSSH()
+	return "Success"
 		
 def get_hosts(config):
 	hosts = []	
@@ -36,7 +36,7 @@ def get_allvms(config):
 	return tuples
 
 def exit_cleanup(signal, frame):
-	print Fore.RED + 'Caught signal .. Cleaning Up' + Fore.RESET
+	message ( 'Caught signal .. Cleaning Up', {'style': 'INFO'} ) 
 	for host_name in hosts:
 		if config['HOSTS'][host_name]['host_ref']:
 			host = config['HOSTS'][host_name]['host_ref']
@@ -45,39 +45,44 @@ def exit_cleanup(signal, frame):
 					vm_ref = config['HOSTS'][host][vm]['vm_ref']
 					del vm_ref
 				except Exception:
-					print "VM reference %s already clean"% host_name
+					message( "VM reference %s already clean"% vm , { 'to_log':1 } )
 			try:
 				del config['HOSTS'][host_name]['host_ref']
+				break
 			except Exception:
-				print "Host reference %s already clean"% host_name
+				message ( "Host reference %s already clean"% host_name , {'style': 'OK'} )
 			else:
-				print "host %s untouched"% host_name
+				message ( "Host %s untouched"% host_name , {'style': 'OK'} )
+	sys.exit("Cleaned")
 
 def wipe_vmpool(hosts):
-	print Fore.RED + 'Wiping Hosts VM pools' + Fore.RESET
+	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} ) 
 	for host_name in hosts:
 		host = config['HOSTS'][host_name]['host_ref']
 		print host.wipe_setup()
+	return "Success"
 
 def do_manufacture(hosts):
-        print Fore.RED + 'Manufacture Option Set' + Fore.RESET
-        threads = []
-        for host_name in hosts:
-                host = config['HOSTS'][host_name]['host_ref']
-                newThread = threading.Thread(target=manufVMs, args = (host,))
-                newThread.start()
-                threads.append(newThread)
-        for thread in threads:
-                thread.join()
+	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
+	threads = []
+	for host_name in hosts:
+			host = config['HOSTS'][host_name]['host_ref']
+			newThread = threading.Thread(target=manufVMs, args = (host,))
+			newThread.start()
+			threads.append(newThread)
+	for thread in threads:
+			thread.join()
+	return "Success"
 
 def do_upgrade():
-	print Fore.RED + 'Upgrade Option set' + Fore.RESET
+	message ( 'Upgrade Option set', {'style': 'INFO'} ) 
 	threads = []
 	for host_name in hosts:
 		host = config['HOSTS'][host_name]['host_ref']
 		newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
 	for thread in threads:
 		thread.join()
+	return "Success"
 
 def objectify_vms(tuples):
 	for line in tuples:
@@ -85,76 +90,83 @@ def objectify_vms(tuples):
 		if not config['HOSTS'][host][vm_name]['vm_ref']:
 			vm = vm_node(config,host,vm_name)
 			config['HOSTS'][host][vm_name]['vm_ref'] = vm
+	return "Success"
 
 def basic_settings(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		print Fore.YELLOW +"Now going inside VM %s, setting up ssh connections"%vm_name + Fore.RESET
+		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			print vm.rotate_logs()
-			print vm.factory_revert()
-			print vm.install_license()
-			print vm.setSnmpServer()
-			print vm.config_dns()
-			print vm.config_ntp()
-			print vm.configusers()
-			print vm.setHostName()
-			print vm.setIpHostMaps()
-			print vm.setStorNw()
-			print vm.config_write()
+			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
+			message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
+			message ( "License-Install_Output = %s " %vm.install_license()	, {'style': 'INFO'} )
+			message ( "SnmpConfig_Output = %s " %vm.setSnmpServer()			, {'style': 'INFO'} )
+			message ( "DNS-Config_Output = %s " %vm.config_dns()			, {'style': 'INFO'} )
+			message ( "NTP-Config_Output = %s " %vm.config_ntp()			, {'style': 'INFO'} )
+			message ( "User-Config_Output = %s " %vm.configusers()			, {'style': 'INFO'} )
+			message ( "Hostname-Config_Output = %s " %vm.setHostName()		, {'style': 'INFO'} )
+			message ( "HostMaps_Output = %s " %vm.setIpHostMaps()			, {'style': 'INFO'} )
+			message ( "Storage-nw_Output = %s " %vm.setStorNw()				, {'style': 'INFO'} )
+			message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
+	return "Success"
 
 def generate_keys(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			print vm.gen_dsakey()
+			message ( "GenDSAKey_Output = %s " % vm.gen_dsakey()		, {'style': 'INFO'} )
+	return "Success"
 
 def shareKeys(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		print "Now sharing pub-keys inside VM %s"%vm_name
+		message ( "Now sharing pub-keys inside VM %s" % vm_name, {'style': 'INFO'} ) 
 		if vm.ssh_self():
-			print vm.removeAuthKeys()
-			print vm.authPubKeys()
-			print vm.config_write()
+			message ( "RemoveAuthKeys_Output = %s " % vm.removeAuthKeys()		, {'style': 'INFO'} )
+			message ( "AuthPubKeys_Output = %s " % vm.authPubKeys()				, {'style': 'INFO'} )
+			message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
+	return "Success"
 
 def setupClusters(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		print "Now setting clusters inside VM %s"%vm_name
+		message ( "Now setting clusters inside VM %s" % vm_name, {'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.is_clusternode():
-				print vm.setclustering()
+				message ( "Setup-Cluster_Output = %s " % vm.setclustering()			, {'style': 'INFO'} )
 				time.sleep(5) # Let clustering settle down
-				print vm.config_write()
+				message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
 			else:
-				print "nothing to do in %s" %vm_name
+				message ( "nothing to do in %s" %vm_name				, {'style': 'INFO'} )
+	return "Success"
 
 def setupStorage(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		print(Fore.RED + "Now setting up storage inside VM %s"%vm_name + Fore.RESET) 
+		message ( "Now setting up storage inside VM %s"%vm_name, {'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.has_storage():
-				print vm.bring_storage()
+				message ("Bring-Strogage_Output = %s " %  vm.bring_storage() ,			{'style': 'INFO'} )
 				if not opt_skip_format :
-					print vm.format_storage()
-				print vm.mount_storage()
-				print vm.config_write()
+					message ( "FormatStorage_Output = %s " % vm.format_storage() ,	{'style': 'INFO'} )
+				message ( "MountStorage_Output = %s " %  vm.mount_storage(),			{'style': 'INFO'} )
+				message ( "Config-Write_Output = %s " %  vm.config_write(),			{'style': 'INFO'} )
+	return "Success"
 
 def setupHDFS(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		print "Now setting up HDFS inside VM %s"%vm_name
+		message ( "Now setting up HDFS inside VM %s"%vm_name,{'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
-				print vm.setup_HDFS()
+				message ("Setup-HDFS_Output = %s " %  vm.setup_HDFS(),{'style': 'INFO'} )
+	return "Success"
 
 def clear_ha(tuples):
 	for line in tuples:
@@ -168,83 +180,26 @@ def clear_ha(tuples):
 			vm.registerDataNode()
 		if vm.is_clusternode():
 			vm.unregisterCluster()
+	return "Success"
 
 def manufVMs(host):
 	time.sleep(1)
-	print host.enableVirt()
-	print host.synctime()
-	print host.setDNS()
+	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
+	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
+	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
 	if opt_lazy:
 		if not host.is_template_present():
 			sys.exit( "Template missing in host %s" % host.getname())
 	else:
-		print host.getMfgCd()
-		print host.delete_template()
-		print host.create_template()
+		message (  "GetMfgISO_Output = %s " % host.getMfgCd()				,{'style': 'INFO'} )
+		message (  "Delete-Template_Output = %s " % host.delete_template()	,{'style': 'INFO'} )
+		message (  "Create-Template_Output = %s " % host.create_template()	,{'style': 'INFO'} )
 	
-	print host.deleteVMs()
-	print host.declareVMs()
-	print host.instantiateVMs()
-	print host.startVMs()
-	
-def get_system_date():
-	now = time.strftime("%c")
-	return now
-
-def message(message_string,arg_ref):
-	if arg_ref['style'] and re.match("^ok$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_ok()
-		+ message_string
-		
-	if arg_ref['style'] and re.match("^nok$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_nok()
-		+ message_string
-		
-	if arg_ref['style'] and re.match("^info$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_info()
-		+ message_string
-		
-	if arg_ref['style'] and re.match("^warning$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_warning()
-		+ message_string
-		
-	if arg_ref['style'] and re.match("^debug$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_debug()
-		+ message_string
-		
-	if arg_ref['style'] and re.match("^fatal$",arg_ref['style'], re.IGNORECASE):
-		message_string = sprintf_fatal()
-		+ message_string
-		
-	if arg_ref['to_stdout']:
-		print message_string
-	if arg_ref['to_log']:
-		append_to_log ( sprintf_timestamped ( message_string ) )
-
-
-def sprintf_timestamped(string):
-	timestamped_string = ''
-	chomp(string);
-	strings = string.split()
-	chomp(strings)
-	for line in strings:
-		timestamped_string += time.time().strftime("%b %e %H:%M:%S %Y: $line\n")
-	return timestamped_string
-
-def sprintf_ok():
-    return Fore.WHITE +	Back.GREEN +	Style.BRIGHT +	"OK" + Fore.RESET + Back.RESET + Style.RESET_ALL
-def sprintf_nok():
-    return Fore.WHITE +	Back.RED +		Style.BRIGHT +	"NOK" + Fore.RESET + Back.RESET + Style.RESET_ALL
-def sprintf_info():
-    return Fore.WHITE +	Back.BLUE +		Style.DIM +		"INFO" + Fore.RESET + Back.RESET + Style.RESET_ALL
-def sprintf_warning():
-    return Fore.CYAN +	Back.BLUE +		Style.BRIGHT +	"WARN" + Fore.RESET + Back.RESET + Style.RESET_ALL
-def sprintf_debug():
-    return Fore.YELLOW +	Back.BLUE +	Style.DIM +		"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL
-def sprintf_fatal():
-    return Fore.GREEN +	Back.BLUE +		Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL
-
-
+	message ( "DeleteVMs_Output = %s " % host.deleteVMs()					,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = %s " % host.declareVMs()					,{'style': 'INFO'} )
+	message ( "CreateVMs_Output = %s " % host.instantiateVMs()				,{'style': 'INFO'} )
+	message ( "PowerON-VMs_Output = %s " % host.startVMs()					,{'style': 'INFO'} )
+	return "Success"
 
 def validate(config):
 	validator = Validator()
@@ -252,10 +207,10 @@ def validate(config):
 	if results != True:
 		for (section_list, key, _) in flatten_errors(config, results):
 			if key is not None:
-				print 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list))
+				message ( 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list)), {'style':'DEBUG'} )
 			else:
-				print 'The following section was missing:%s ' % ', '.join(section_list)     
-		print 'Config file %s validation failed!'% config_filename
+				message ( 'The following section was missing:%s ' % ', '.join(section_list)   , {'style':'DEBUG'} )
+		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
 		sys.exit(1)
 
 '''
@@ -282,9 +237,10 @@ if __name__ == '__main__':
 						type=str,
 						help='INI file to choose as Input')
 	parser.add_argument("-l","--log",
+						metavar='LOGFILE',
 						nargs=1,
 						type=str,
-						help='Custom logfile name. default is script.PID.log( DoesNOT redirects stdout)')
+						help='Custom logfile name. default is script.PID.log (DoesNOT redirects stdout)')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',
@@ -343,23 +299,21 @@ if __name__ == '__main__':
 	opt_lazy		= args.lazy
 	opt_reconfig	= args.reconfig
 	allvms = None
+	if args.log:
+		os.environ["LOGFILE_NAME"] = args.log[0]
+	message ("Got input file as %s "%config_filename,
+			 {'to_stdout' : 1, 'to_log' : 1, 'style' : 'info'}
+			 )	
 
-	if args.log is not None:
-		logfile_name = args.log
-	else:
-		logfile_name = os.path.basename(__file__) + os.getpid() + ".log"
-		
-	print Fore.RED + "Got input file as %s"%config_filename + Fore.RESET
 	configspec='config.spec'
-	
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
 	if opt_skip_format and opt_force_format :
-		print "No-Format and force format options cannot be used together."
+		message ( "No-Format and force format options cannot be used together." ,	{'style':'FATAL'} )
 	if opt_wipe and opt_lazy :
-		print "Wipe and Lazy options cannot be used together."
+		message ( "Wipe and Lazy options cannot be used together.", 				{'style':'FATAL'} )
 	if opt_wipe and opt_reconfig:
-		print "Wipe and Reconfig cannot be used together."
+		message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
@@ -395,13 +349,18 @@ if __name__ == '__main__':
 		setupHDFS(allvms)
 	
 	manuf_runtime = time.time() - start_time
-	print Fore.BLUE + 'Manufacture Runtime:' + str(datetime.timedelta(seconds=manuf_runtime)) + Fore.RESET
+	message (' Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),
+			 {'style' : 'info'}
+			 )
 
 	if 'upgrade' in install_type:
 		do_upgrade()
 
 	total_runtime = time.time() - start_time
-	print Fore.BLUE + 'Total Runtime:' + str(datetime.timedelta(seconds=total_runtime)) + Fore.RESET
+	message (' Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),
+			 {'style' : 'info'}
+			 )
+
 
 
 # Debug Command
