@@ -63,7 +63,36 @@ Download the virtual python env containing all necessary scripts. Below is one t
 # source ~/.bashrc
 # activate
 # cd python_env/robot
-# ./Host.py -i setup.ini
+# ./Setup.py setup.ini
+
+Full help Section
+=================
+# ./Setup.py -h
+usage: Setup.py [-h] [-l LOGFILE] [--lazy] [--reconfig] [--no-storage]
+                [--force-format] [--no-format] [--no-ha] [--no-hdfs] [--wipe]
+                [--skip-vm SKIP_VM [SKIP_VM ...]]
+                INIFILE
+
+Make Appliance setups from INI File
+
+positional arguments:
+  INIFILE               INI file to choose as Input
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -l LOGFILE, --log LOGFILE
+                        Custom logfile name. default is script.PID.log
+                        (DoesNOT redirects stdout)
+  --lazy                Skip creating template. Use previous one
+  --reconfig            Skip manuf. VMS . Just factory revert and apply INI
+  --no-storage          Skip iscsi config and remote storage
+  --force-format        Format Volumes, Even if Filesystem present "no-strict"
+  --no-format           Don't format remote storage, override ini settings
+  --no-ha               skip configuring clustering.
+  --no-hdfs             skip configuring HDFS
+  --wipe                First delete Host VM-Pool
+
+
 ```
 
 ##How to make ini file

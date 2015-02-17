@@ -177,7 +177,7 @@ class Host(object):
 	def startVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "VM-Poweron= %s " % vm.poweron()					, {'style': 'INFO'} )
+			message ( "VM-Poweron= %s " % vm.power_on()					, {'style': 'INFO'} )
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
