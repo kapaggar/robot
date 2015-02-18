@@ -449,7 +449,7 @@ class vm_node(object):
 			wwid = self._tps_fs[fs_name]['wwid'].lower()
 			while count > 0 :
 				current_multipaths = self._ssh_session.executeCli('tps multipath show')
-				output +=  Fore.BLUE + current_multipaths + Fore.RESET
+				output += current_multipaths 
 				if wwid in current_multipaths:
 					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
 					output += full_output.splitlines()[-1]

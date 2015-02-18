@@ -56,12 +56,11 @@ def exit_cleanup(signal, frame):
 	sys.exit("Cleaned")
 
 def wipe_vmpool(hosts):
-	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} ) 
+	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} )
 	for host_name in hosts:
 		host = config['HOSTS'][host_name]['host_ref']
-		message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
-		print host.wipe_setup()
-	return "Success"
+		message ( "WipeSetup_Output = %s " %host.wipe_setup()             , {'style': 'INFO'} )
+		return "Success"
 
 def do_manufacture(hosts):
 	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
@@ -210,7 +209,7 @@ def validate(config):
 			if key is not None:
 				message ( 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list)), {'style':'DEBUG'} )
 			else:
-				message ( 'The following section was missing:%s ' % ', '.join(section_list)   , {'style':'DEBUG'} )
+				message ( 'The following section was missing:%s ' % " ".join(section_list)   , {'style':'DEBUG'} )
 		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
 		sys.exit(1)
 
@@ -372,3 +371,4 @@ if __name__ == '__main__':
 # Validate iso and img files are present and are iso & image files
 # validate other config.spec parameters.
 # Write message . log . info generic logging moduli in common library
+# from vm consoles loop a arping updating Host arp cache
