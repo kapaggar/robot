@@ -88,7 +88,7 @@ def sprintf_debug():
     return Fore.YELLOW +	Back.BLUE +	Style.DIM +		"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_fatal():
-    return Fore.GREEN +	Back.BLUE +		Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
+    return Fore.RED +	Back.YELLOW +		Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_unknown():
     return Fore.WHITE +	Back.BLACK +	Style.NORMAL +	"UNKNOWN" + Fore.RESET + Back.RESET + Style.RESET_ALL	+ " : "

@@ -36,7 +36,7 @@ def get_allvms(config):
 	return tuples
 
 def exit_cleanup(signal, frame):
-	message ( 'Caught signal .. Cleaning Up', {'style': 'INFO'} ) 
+	message ( 'Caught signal %s.. Cleaning Up'% signal, {'style': 'INFO'} ) 
 	for host_name in hosts:
 		if config['HOSTS'][host_name]['host_ref']:
 			host = config['HOSTS'][host_name]['host_ref']
@@ -54,6 +54,7 @@ def exit_cleanup(signal, frame):
 			else:
 				message ( "Host %s untouched"% host_name , {'style': 'OK'} )
 	sys.exit("Cleaned")
+	os._exit()
 
 def wipe_vmpool(hosts):
 	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} )
@@ -68,6 +69,7 @@ def do_manufacture(hosts):
 	for host_name in hosts:
 			host = config['HOSTS'][host_name]['host_ref']
 			newThread = threading.Thread(target=manufVMs, args = (host,))
+			newThread.setDaemon(True)
 			newThread.start()
 			threads.append(newThread)
 	for thread in threads:
@@ -188,13 +190,16 @@ def manufVMs(host):
 	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
 	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
 	if opt_lazy:
-		if not host.is_template_present():
+		if host.is_template_present():
+			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
+		else :
+			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
+			os.kill(os.getpid(), signal.SIGTERM)
 			sys.exit( "Template missing in host %s" % host.getname())
 	else:
 		message (  "GetMfgISO_Output = %s " % host.getMfgCd()				,{'style': 'INFO'} )
 		message (  "Delete-Template_Output = %s " % host.delete_template()	,{'style': 'INFO'} )
 		message (  "Create-Template_Output = %s " % host.create_template()	,{'style': 'INFO'} )
-	
 	message ( "DeleteVMs_Output = %s " % host.deleteVMs()					,{'style': 'INFO'} )
 	message ( "DeclareVMs_Output = %s " % host.declareVMs()					,{'style': 'INFO'} )
 	message ( "CreateVMs_Output = %s " % host.instantiateVMs()				,{'style': 'INFO'} )

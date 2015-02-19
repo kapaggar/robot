@@ -393,12 +393,11 @@ class vm_node(object):
 		
 		if self.is_clusternode():
 			cmd += "set hadoop_yarn namenode2 %s \n" % self.name_nodes[1]
+			cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
 			for node in self.journal_nodes:
 				cmd += "set hadoop_yarn journalnodes %s \n" % node
 			for node in self.name_nodes:
 				cmd += "set hadoop_yarn journalnodes %s \n" % node
-	
-		cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
 
 		for node in self.journal_nodes:
 			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
