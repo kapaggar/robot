@@ -1,6 +1,7 @@
 import re
 import os, sys
 import time
+import signal
 import __main__ as main
 from colorama import Fore, Back, Style
 
@@ -51,9 +52,9 @@ def append_to_log(string_to_append):
 	except KeyError: 
 		my_script		=	os.path.basename(main.__file__)
 		my_prefix		=	my_script.split('.')[0]
-		my_PID			=	str(os.getpid()) 
+		my_timestamp	=	time.strftime("%Y%m%d-%H%M%S") 
 		my_suffix		=	"log"
-		logfile_name	=	my_prefix + "." + my_PID  + "." + my_suffix
+		logfile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
 		
 	append_to_file(logfile_name,string_to_append)
 
@@ -100,3 +101,10 @@ def sprintf_nocolor(string):
 def get_system_date():
 	now = time.strftime("%c")
 	return now
+
+def terminate_self(mesg):
+	if mesg :
+		message ("%s"%mesg, {'style':'nok'} )
+	else:
+		message ("Killing Self", {'style':'nok'} )
+	os.kill(os.getpid(), signal.SIGTERM)

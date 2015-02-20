@@ -101,7 +101,8 @@ def basic_settings(tuples):
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
-			message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
+			if opt_reconfig:
+				message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
 			message ( "License-Install_Output = %s " %vm.install_license()	, {'style': 'INFO'} )
 			message ( "SnmpConfig_Output = %s " %vm.setSnmpServer()			, {'style': 'INFO'} )
 			message ( "DNS-Config_Output = %s " %vm.config_dns()			, {'style': 'INFO'} )
@@ -194,8 +195,8 @@ def manufVMs(host):
 			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
 		else :
 			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
-			os.kill(os.getpid(), signal.SIGTERM)
-			sys.exit( "Template missing in host %s" % host.getname())
+			terminate_self("Template missing in host %s" % host.getname())
+			sys.exit( "Template missing in host %s" % host.getname()) # this should never get executed
 	else:
 		message (  "GetMfgISO_Output = %s " % host.getMfgCd()				,{'style': 'INFO'} )
 		message (  "Delete-Template_Output = %s " % host.delete_template()	,{'style': 'INFO'} )
@@ -315,10 +316,13 @@ if __name__ == '__main__':
 	validate(config)
 	if opt_skip_format and opt_force_format :
 		message ( "No-Format and force format options cannot be used together." ,	{'style':'FATAL'} )
+		sys.exit(1)
 	if opt_wipe and opt_lazy :
 		message ( "Wipe and Lazy options cannot be used together.", 				{'style':'FATAL'} )
+		sys.exit(1)
 	if opt_wipe and opt_reconfig:
 		message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
+		sys.exit(1)
 	
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
@@ -377,3 +381,4 @@ if __name__ == '__main__':
 # validate other config.spec parameters.
 # Write message . log . info generic logging moduli in common library
 # from vm consoles loop a arping updating Host arp cache
+# Remove forbidden nodes from the iscsi connection after the setup

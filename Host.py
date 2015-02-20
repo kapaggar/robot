@@ -2,7 +2,7 @@
 import re
 from session import session
 from vm_node import vm_node
-from Toolkit import message
+from Toolkit import message,terminate_self
 from urlgrabber import urlopen,grabber
 from os.path import basename
 
@@ -58,8 +58,13 @@ class Host(object):
 	
 	def delete_template(self):
 		output = ''
-		output += self._ssh_session.executeCli('virt vm template install cancel')
-		output += self._ssh_session.executeCli('no virt vm template ') 
+		response = self._ssh_session.executeCli('virt vm template install cancel')
+		output += response
+		if "progress" in response :
+			message ("No Template installation already in progess", {'style':'OK'})
+		else :
+			message ("Similar installation is already Running on host %s."% self.getname(), {'style':'DEBUG'})
+			output += self._ssh_session.executeCli('no virt vm template ')
 		return output
 	
 	def get_common(self):
@@ -137,7 +142,15 @@ class Host(object):
 	def getMfgCd(self):
 		output = ''
 		iso_path = self.get_iso_path()
-		output +=  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
+		try :
+			output +=  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
+			if "failed" in output:
+				message ("Unable to fetch url %s on host %s"% (iso_path,self.getname()),{'style':'NOK'})
+				message ("Reason %s"%output,{'style':'debug'})
+				terminate_self("Exiting..")
+		except Exception :
+			message ("Unable to fetch url %s in host %s"% (iso_path,self.getname()),{'style':'NOK'})
+			terminate_self("Exiting..") 
 		return output
 	
 	def get_common(self):
