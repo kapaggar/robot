@@ -5,6 +5,8 @@ import signal
 import __main__ as main
 from colorama import Fore, Back, Style
 
+logfile_name = ''
+
 def message(message_string,arg_ref):
 	"""
 		'to_log' : 1,
@@ -43,18 +45,20 @@ def message(message_string,arg_ref):
 
 
 def append_to_log(string_to_append):
-	logfile_name = ''
+	global logfile_name
 	if not string_to_append :
-		return 1 
-	try:
-		if os.environ["LOGFILE_NAME"]:
-			logfile_name = os.environ["LOGFILE_NAME"]
-	except KeyError: 
-		my_script		=	os.path.basename(main.__file__)
-		my_prefix		=	my_script.split('.')[0]
-		my_timestamp	=	time.strftime("%Y%m%d-%H%M%S") 
-		my_suffix		=	"log"
-		logfile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
+		return 1
+	if not logfile_name:
+		try:
+			if os.environ["LOGFILE_NAME"]:
+				logfile_name = os.environ["LOGFILE_NAME"]
+		except KeyError: 
+			my_script		=	os.path.basename(main.__file__)
+			my_prefix		=	my_script.split('.')[0]
+			my_timestamp	=	time.strftime("%Y%m%d-%H%M%S") 
+			my_suffix		=	"log"
+			logfile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
+			os.environ["LOGFILE_NAME"] = logfile_name
 		
 	append_to_file(logfile_name,string_to_append)
 
@@ -95,7 +99,7 @@ def sprintf_unknown():
     return Fore.WHITE +	Back.BLACK +	Style.NORMAL +	"UNKNOWN" + Fore.RESET + Back.RESET + Style.RESET_ALL	+ " : "
 
 def sprintf_nocolor(string):
-	regex = re.compile(ur'\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]', re.UNICODE)
+	regex = re.compile(ur'\x1B\[([0-9]{0,2}(;[0-9]{0,2})?)?[m|K]', re.UNICODE)
 	return re.sub(regex,"", string)
 
 def get_system_date():

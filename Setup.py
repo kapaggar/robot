@@ -112,6 +112,9 @@ def basic_settings(tuples):
 			message ( "HostMaps_Output = %s " %vm.setIpHostMaps()			, {'style': 'INFO'} )
 			message ( "Storage-nw_Output = %s " %vm.setStorNw()				, {'style': 'INFO'} )
 			message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
+		else :
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
 	return "Success"
 
 def generate_keys(tuples):
@@ -120,6 +123,9 @@ def generate_keys(tuples):
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			message ( "GenDSAKey_Output = %s " % vm.gen_dsakey()		, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
 	return "Success"
 
 def shareKeys(tuples):
@@ -131,6 +137,9 @@ def shareKeys(tuples):
 			message ( "RemoveAuthKeys_Output = %s " % vm.removeAuthKeys()		, {'style': 'INFO'} )
 			message ( "AuthPubKeys_Output = %s " % vm.authPubKeys()				, {'style': 'INFO'} )
 			message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
 	return "Success"
 
 def setupClusters(tuples):
@@ -145,6 +154,10 @@ def setupClusters(tuples):
 				message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
 			else:
 				message ( "nothing to do in %s" %vm_name				, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
+			
 	return "Success"
 
 def setupStorage(tuples):
@@ -159,6 +172,9 @@ def setupStorage(tuples):
 					message ( "FormatStorage_Output = %s " % vm.format_storage() ,	{'style': 'INFO'} )
 				message ( "MountStorage_Output = %s " %  vm.mount_storage(),			{'style': 'INFO'} )
 				message ( "Config-Write_Output = %s " %  vm.config_write(),			{'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
 	return "Success"
 
 def setupHDFS(tuples):
@@ -169,6 +185,9 @@ def setupHDFS(tuples):
 		if vm.is_namenode():
 			if vm.ssh_self():
 				message ("Setup-HDFS_Output = %s " %  vm.setup_HDFS(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+				terminate_self("Exiting")
 	return "Success"
 
 def clear_ha(tuples):
