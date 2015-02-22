@@ -9,7 +9,7 @@ import os,sys
 import random
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message
+from Toolkit import message , terminate_self
 
 
 class session(object):
@@ -29,19 +29,17 @@ class session(object):
 		self._stdin 				= None
 		self._stdout 				= None
 		self._stderr 				= None
-		self.loginPrompt 			= None
-		self.enPrompt 				= None
-		self.cliPrompt  			= None
-		self.pmxPrompt 				= None
-		self.shellPrompt 			= None
-		self.currentPrompt 			= None
 		self.newline 				= "\n"
 		self.current_send_string	= ''
 		if host and username and password:
 			self.connect()
-			#self.checkPrompts()
+		message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 	@property
-
+	
+	def __del__(self):
+		if self.session != None:
+			message ( "session del for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+			self.session.close()
 	def username(self):
 		return self._username
 	
@@ -55,31 +53,35 @@ class session(object):
 		while retry < 5:
 			try:
 				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
+				message ( "connect on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.transport = self.session.get_transport()
+				message ( "transport on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				#self.transport.set_keepalive(15)
 				self.chan = self.session.invoke_shell()
+				message ( "shell invoke on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.chan.settimeout(1200)
 				self.chan.set_combine_stderr(True)
 				return
 			except socket.error, (value):
-				message ( "SSH Connection refused, will retry in 5 seconds", {'to_log':'1' , 'style': 'WARNING'} )
+				message ( "SSH Connection refused, will retry in 5 seconds", { 'style': 'DEBUG' } )
 				time.sleep(5)
 				retry += 1
 			except paramiko.BadHostKeyException:
-				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, {'to_log':1 , 'style': 'FATAL'} ) 
-				message ( 'Edit that file to remove the entry and then hit return to try again', {'to_log':1 , 'style': 'DEBUG'} ) 
-				rawinput('Hit Enter when ready')
-				retry += 1
+				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, { 'style': 'FATAL' } ) 
+				message ( 'Edit  ~/.ssh/known_hosts file to remove the entry and try again', {'style': 'TRACE'} ) 
+				terminate_self("Exiting")
 			except EOFError:
-				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', {'to_log':1 , 'style': 'WARNING'} ) 
+				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
 				time.sleep(5)
 				retry += 1
-				message ( 'Could not establish SSH connection', {'to_log':1 , 'style': 'FATAL'} ) 
 
 	def close(self):
 		self.chan.close()
-		self.transport.close()	    
+		message ( "channel closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+		self.transport.close()
+		message ( "Transport closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		self.session.close()
+		message ( "Session closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 	
 	def getLoginPrompt(self,line):
 		try:
@@ -102,7 +104,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			message ( "error matching getenPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			message ( "Error matching getenPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
 	def getcliPrompt(self,line):
@@ -114,7 +116,7 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			message ( "error matching getcliPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			message ( "Error matching getcliPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 		
 	def getshellPrompt(self,line):
@@ -126,27 +128,33 @@ class session(object):
 			else:
 				return False
 		except Exception:
-			message ( "error matching getshellPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			message ( "Error matching getshellPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
 	def tellPrompt(self,line):
 		try:
 			if self.getshellPrompt(line):
+				message ( "In shell prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "shell"
 			elif self.getcliPrompt(line):
+				message ( "In cli prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "cli"
 			elif self.getenPrompt(line):
+				message ( "In en prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "en"
 			elif self.getLoginPrompt(line):
+				message ( "In login prompt in %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "login"
-			elif line.find("pm extension>")!= -1:
+			elif line.find("pm extension>") != -1:
+				message ( "In pmx prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "pmx"
 			else:
-				return None
+				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return False
 		except Exception:
-			errorMsg = "Error:  %s" % traceback.format_exc()
-			BuiltIn().fail(errorMsg)
-			return False
+			errorMsg = "Error: %s" % traceback.format_exc()
+			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
+			return None
 
 	def checkFileExist(self,filenameFullPath):
 		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
@@ -185,6 +193,7 @@ class session(object):
 	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1):
 		output = ''
 		prompt = self.getPrompt()
+		message ( "executeCli| prompt=> %s| cmd=> %s| host=> %s|" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait)
 			return output
@@ -217,8 +226,8 @@ class session(object):
 		for lines in cmds:
 			 self.write(lines)
 			 time.sleep(0.5)
-		message ( "sending => \"%s\" on remote-host %s" %( cmd,self._host),
-				 {'to_stdout':1, 'to_log':1 , 'style': 'OK'}
+		message ( "sending=>\"%s\" on %s" %( cmd,self._host),
+				 {'to_trace':1, 'to_log':1 , 'style': 'TRACE'}
 				 ) 
 		data = ''
 		output = ''
@@ -236,11 +245,12 @@ class session(object):
 			lines =  data.splitlines()
 			if len(lines) > 0 :
 				lastline = lines[-1]
+				#message ( "debug long running cmd progress at =>\"%s\" on %s" % (lastline,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 			else:
-				message ( "Client Disconnected",
+				message ( "Client Disconnected.. reboot ?",
 						 {'to_stdout':1, 'to_log':1 , 'style': 'NOK'}
 						 ) 
-				return False #May be shell exited abruptly
+				return False #May be shell exited abruptly 
 			if isinstance(prompt,re._pattern_type):
 				if prompt.match(lastline):
 					output = re.sub(prompt,'',output)
@@ -256,6 +266,7 @@ class session(object):
 	def executePmx(self,cmd):
 		output = ''
 		prompt = self.getPrompt()
+		message ( "In executePmx prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
@@ -280,6 +291,7 @@ class session(object):
 	def executeShell(self,cmd):
 		output = ''
 		prompt = self.getPrompt()
+		message ( "In executeShell prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
@@ -370,11 +382,6 @@ class session(object):
 			new_line = self.re_color_codes.sub('', new_line)
 			ret.append(new_line)
 		return ret   
-
-
-	def __del__(self):
-		if self.session != None:
-			self.session.close()
 
 
 if __name__ == '__main__':

@@ -11,7 +11,6 @@ from os.path import basename
 ######################################################
 
 class Host(object):
-
 	def __init__(self,config_ref,host):
 		self._ssh_session = None
 		self._name = host
@@ -27,9 +26,12 @@ class Host(object):
 		self._brMgmt			= self.config['HOSTS'][self._name ]['brMgmt']
 		self._brStor			= self.config['HOSTS'][self._name ]['brStor']
 		self._vms				= self.get_vms()
+		message ( "Host init object %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
 
 	def __del__(self):
 		if self._ssh_session != None:
+			message ( "Host del object  %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			self._ssh_session.close()
 
 	def getname(self):
@@ -112,10 +114,10 @@ class Host(object):
 	def is_template_present(self):
 		output = ''
 		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._template_file)
-		if "No such file or directory" in output:
-			return False
-		else :
+		if output.find("No such file or directory") != -1:
 			return True
+		else :
+			return False
 		
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
@@ -201,4 +203,5 @@ class Host(object):
 				message ( "VM-Reload	= %s " % vm.reload()			, {'style': 'INFO'} )
 
 if __name__ == '__main__':
-	pass
+    pass
+    host = Host(config,"FIVE")

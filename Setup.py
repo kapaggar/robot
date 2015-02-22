@@ -9,7 +9,7 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message
+from Toolkit import message,terminate_self
 import threading
 
 def connect_hosts (hosts):
@@ -234,9 +234,9 @@ def validate(config):
 			if key is not None:
 				message ( 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list)), {'style':'DEBUG'} )
 			else:
-				message ( 'The following section was missing:%s ' % " ".join(section_list)   , {'style':'DEBUG'} )
+				message ( 'The following section was missing:%s ' % ", ".join(section_list)   , {'style':'DEBUG'} )
 		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
-		sys.exit(1)
+		terminate_self("Exiting.")
 
 '''
 Steps:
@@ -377,7 +377,7 @@ if __name__ == '__main__':
 		setupHDFS(allvms)
 	
 	manuf_runtime = time.time() - start_time
-	message (' Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),
+	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),
 			 {'style' : 'info'}
 			 )
 
@@ -385,7 +385,7 @@ if __name__ == '__main__':
 		do_upgrade()
 
 	total_runtime = time.time() - start_time
-	message (' Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),
+	message ('Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),
 			 {'style' : 'info'}
 			 )
 
@@ -395,9 +395,7 @@ if __name__ == '__main__':
 # pydbgp -d localhost:9001  Setup.py  INIFILE
 
 #TODO
-# Exception if there is one "virt volume fetch url" already running on Host system
+# Exception if there is one "virt volume fetch url" already running on Host system.retry after 5 min
 # Validate iso and img files are present and are iso & image files
 # validate other config.spec parameters.
-# Write message . log . info generic logging moduli in common library
-# from vm consoles loop a arping updating Host arp cache
 # Remove forbidden nodes from the iscsi connection after the setup

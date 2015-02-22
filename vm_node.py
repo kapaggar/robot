@@ -7,7 +7,7 @@ import commands
 import os,sys
 import random
 from session import session
-from Toolkit import message
+from Toolkit import message,terminate_self
 
 class vm_node(object):
 	nodes_ip = {}
@@ -65,16 +65,20 @@ class vm_node(object):
 	def __del__(self):
 		if self._ssh_session != None:
 			self._ssh_session.close()
+			message ( "Deleting vm object for %s " % self._name, {'to_trace': '1' ,'style': 'TRACE'} )
 
 	def _set_clusterName(self):
 		if self._clusterVIP :
-			return str(self.dottedQuadToNum(self._clusterVIP))
+			computed_name = str(self.dottedQuadToNum(self._clusterVIP))
+			message ( "Cluster VIP computed as %s " % computed_name, {'to_trace': '1','style': 'TRACE'} )
+			return computed_name
 		else:
 			message ( "Raise Exception..not a clusterNode still you are asking clusterName", {'style': 'FATAL'} )
 
 	def _get_loop_device(self):
 		result = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
 		next_loop_device = "".join(result.split())
+		message ( "Next available Loop device is %s " % next_loop_device,{'to_trace': '1' ,'style': 'TRACE'}  )
 		try:
 			if "/dev/" in next_loop_device:
 				return next_loop_device
@@ -84,29 +88,36 @@ class vm_node(object):
 
 	def registerNameNode(self):
 		self.name_nodes.append(self._name)
-		
+		message ( "registerNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
 	def unregisterNameNode(self):
 		self.name_nodes.remove(self._name)
 		self._namenode = None
 		self.config_ref['HOSTS'][self._host][self._name]['name_node'] = None
+		message ( "unregisterNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 	
 	def registerJournalNode(self):
 		self.journal_nodes.append(self._name)
+		message ( "registerJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 	
 	def unregisterJournalNode(self):
 		self.journal_nodes.remove(self._name)
 		self._journalnode = None
 		self.config_ref['HOSTS'][self._host][self._name]['journal_node'] = None
+		message ( "unregisterJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		
 	def registerDataNode(self):
 		self.data_nodes.append(self._name)
+		message ( "registerDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 
 	def unregisterDataNode(self):
 		self.data_nodes.remove(self._name)
+		message ( "unregisterDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		
 	def unregisterCluster(self):
 		self._clusterVIP = None
 		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
+		message ( "unregisterCluster %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 	
 	def is_clusternode(self):
 		if self._clusterVIP is not None:
@@ -147,10 +158,12 @@ class vm_node(object):
 
 	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
+		message ( "cloned volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 	
 	def delete_volume(self):
 		output =  self._host_ssh_session.executeCli("no virt volume file %s" % self._diskimage)
+		message ( "deleted volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 
 	def set_mfgdb(self):
@@ -163,7 +176,9 @@ class vm_node(object):
 			match = re_varoffset.search(layout_template)
 			if match:
 				var_offset = match.group("varOffset")
+				message ( "varoffset in set_mfgdb is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
 			else:
+				message ( "Cannot find VarOffset in  set_mfgdb ",{'to_trace': '1' ,'style': 'TRACE'}  )
 				return False
 		except Exception:
 			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
@@ -249,28 +264,30 @@ class vm_node(object):
 			while timeOut > 0:
 				if self.pingable(self._ip):
 					message ( "VM %s responds from %s "%(self._name,self._ip),
-							 {'to_stdout':0,'style': 'DEBUG'}
+							 {'style': 'DEBUG'}
 							 )
 					vm_up = True
 					break
 				else:
-					message ( "Waiting for VM %s %s to come up, sleeping for 10 seconds"%(self._name,self._ip),
-							 {'to_stdout':0,'style': 'DEBUG'}
+					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds"%(self._name,self._ip),
+							 {'style': 'DEBUG'}
 							 )
-					time.sleep(10)
-					timeOut = timeOut - 10        
+					time.sleep(5)
+					timeOut = timeOut - 5       
 			if vm_up :
 				#Find out admin user pass ( if not in config set default)
-				#username = 'admin'
-				#password = 'admin@123'
-				#for cred in self._enabledusers:
-				#	username,password = cred.split(":")
-				#	if username.find('admin'):
-				self._ssh_session = session(host=self._ip, username="admin" , password="admin@123")
+				username = 'admin'
+				password = 'admin@123'
+				for cred in self._enabledusers:
+					user,passwd = cred.split(":")
+					if user.find('admin') != -1:
+						username	= user
+						password	= passwd
+				self._ssh_session = session(self._ip, username , password)
 				return self._ssh_session
 			else :
 				message ( "Exception that SSH connection can;t be made to the VM"  ,
-						 {'to_stdout':1,'style': 'FATAL'}
+						 {'style': 'FATAL'}
 						 )
 				return False
 		elif  self._ssh_session :
@@ -317,7 +334,8 @@ class vm_node(object):
 					tuples = user + ":" + self._dsakey
 					self.pub_keys.append(tuples)
 			except Exception:
-				errorMsg = "Error:  Cannot obtain ssh public keys from host" 
+				errorMsg = "Error:  Cannot obtain ssh public keys from host"
+				message ( "Failure in gen_dsakey  %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return False
 		return output
 
@@ -408,6 +426,7 @@ class vm_node(object):
 		cmd += "set hadoop_yarn state UNINIT \n"
 		output += self._ssh_session.executePmx(cmd)
 		output += self._ssh_session.executeCli('pm process tps restart')
+		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 
 	def has_storage(self):
@@ -438,17 +457,20 @@ class vm_node(object):
 		global_format_forced = self.config_ref['HOSTS']['force_format']
 		if global_format_forced:
 			format_option += "no-strict"
+			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			
 		for fs_name in self._tps_fs.keys():
 			ini_format_option = self._tps_fs[fs_name]['format']
 			if ini_format_option is False:
+				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
 				return
 			
 			count = 10
 			wwid = self._tps_fs[fs_name]['wwid'].lower()
 			while count > 0 :
 				current_multipaths = self._ssh_session.executeCli('tps multipath show')
-				output += current_multipaths 
+				message ( "Current multipaths =  %s " % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
 				if wwid in current_multipaths:
 					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
 					output += full_output.splitlines()[-1]
@@ -492,6 +514,7 @@ class vm_node(object):
 	def setclustering(self):
 		output = ''
 		if not self.is_clusternode():
+			message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			return False # TODO Raise exception
 		if not self._cluster_name:
 			self._cluster_name = self._set_clusterName() 
@@ -509,21 +532,22 @@ class vm_node(object):
 	def set_clusterMaster(self):
 		output = ''
 		if not self.is_clusternode():
+			message ( "Improper calling of set_clusterMaster in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			return False # raise exception
 		output =  session.executeCli('cluster master self')
 		return output 
 
 	def image_fetch(self):
 		output = ''
-		output += self._ssh_session.executeCli('image fetch %s'%self._upgrade_img)
+		output += self._ssh_session.executeCli('image fetch %s' % self._upgrade_img)
 		return output
 	
 	def image_install(self):
-		output = ''
-		image_name = self._upgrade_img.split("/")[-1]
-		output += self._ssh_session.executeCli('image install %s'%image_name)
+		output		 = ''
+		image_name	 = self._upgrade_img.split("/")[-1]
+		output		+= self._ssh_session.executeCli('image install %s' % image_name )
 		#TODO check error
-		output += self._ssh_session.executeCli('image boot next')
+		output		+= self._ssh_session.executeCli('image boot next')
 		return output
 
 	def reload(self):
@@ -540,4 +564,5 @@ class vm_node(object):
 
 
 if __name__ == '__main__':
-	pass
+    pass
+    vm = vm_node(config,"FIVE","five-one")
