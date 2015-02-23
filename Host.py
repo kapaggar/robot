@@ -56,17 +56,23 @@ class Host(object):
 		cmd += "rm -rf /data/virt/pools/default/*.iso \n"
 		cmd += "rm -rf /data/virt/pools/default/*.img \n"
 		output +=  self._ssh_session.executeShell(cmd)
-		return output
+		if output.find("cannot") != -1:
+			return output + "Fail"
+		else:
+			return output + "Success"
 	
 	def delete_template(self):
 		output = ''
 		response = self._ssh_session.executeCli('virt vm template install cancel')
 		output += response
-		if "progress" in response :
-			message ("No Template installation already in progess", {'style':'OK'})
-		else :
-			message ("Similar installation is already Running on host %s."% self.getname(), {'style':'DEBUG'})
+		if response.find("No installation in progress on VM") != -1 :
+			message ("Similar installation was already Running on host %s."% self.getname(), {'style':'WARNING'})
 			output += self._ssh_session.executeCli('no virt vm template ')
+			message ("Older installation stopped on host %s."% self.getname(), {'style':'OK'})
+			output = str(output) + " Success"
+		else :
+			message ("No Template installation in progess", {'style':'OK'})
+			output = str(output) + " Success"
 		return output
 	
 	def get_common(self):
@@ -89,26 +95,41 @@ class Host(object):
 		output += self._ssh_session.executeCli('ntpdate  %s' %self._ntp_server )
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
 		output += self._ssh_session.executeCli('ntp enable ')
+		if output.find("adjust") != -1 :
+			output += " Success"
+		else:
+			output += " Fail"
 		return output
 
 	def setDNS(self):
-		return self._ssh_session.executeCli('ip name-server %s '%self._name_server)
+		output = ''
+		try:
+			output += self._ssh_session.executeCli('ip name-server %s '%self._name_server)
+			output = output + " Success"
+		except Exception:
+			message ( "Cannot set dns server on %s " % self._host,{ 'style': 'WARNING'}  )
+		return output
 
 	def create_template(self):
 		output = ''
 		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
+		message ( "create_template iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'TRACE'}  )
 		iso_name = basename(iso_path)
-		output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
-		output +=  self._ssh_session.executeCli('virt vm template storage device drive-number 1 source file %s mode read-write' % template_name)
-		output +=  self._ssh_session.executeCli('virt vm template vcpus count 4')
-		output +=  self._ssh_session.executeCli('virt vm template memory 16384')
-		output +=  self._ssh_session.run_till_prompt('virt vm template install cdrom file %s disk-overwrite connect-console text timeout 60' % iso_name , "(none) login:",wait=30)
-		output +=  self._ssh_session.run_till_prompt('root', "#",wait=1)
-		output +=  self._ssh_session.run_till_prompt('PS1="my_PROMPT"', "my_PROMPT",wait=1)
-		output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=8192/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
-		output +=  self._ssh_session.run_till_prompt('/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda',"my_PROMPT",wait=60)
-		output +=  self._ssh_session.run_till_prompt('reboot')
+		try:
+			output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
+			output +=  self._ssh_session.executeCli('virt vm template storage device drive-number 1 source file %s mode read-write' % template_name)
+			output +=  self._ssh_session.executeCli('virt vm template vcpus count 4')
+			output +=  self._ssh_session.executeCli('virt vm template memory 16384')
+			output +=  self._ssh_session.run_till_prompt('virt vm template install cdrom file %s disk-overwrite connect-console text timeout 60' % iso_name , "(none) login:",wait=30)
+			output +=  self._ssh_session.run_till_prompt('root', "#",wait=1)
+			output +=  self._ssh_session.run_till_prompt('PS1="my_PROMPT"', "my_PROMPT",wait=1)
+			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=8192/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
+			output +=  self._ssh_session.run_till_prompt('/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda',"my_PROMPT",wait=60)
+			output +=  self._ssh_session.run_till_prompt('reboot')
+		except Exception:
+			message ( "Template creation failed  %s " % self._name,{'style': 'FATAL'}  )
+			output = output + " Failed "
 		return output
 
 	def is_template_present(self):
@@ -143,16 +164,20 @@ class Host(object):
 	
 	def getMfgCd(self):
 		output = ''
+		response = ''
 		iso_path = self.get_iso_path()
+		message ("iso to fetch = %s" % iso_path,{'style':'INFO'})
 		try :
-			output +=  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
-			if "failed" in output:
+			response =  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
+			if "failed" in response:
 				message ("Unable to fetch url %s on host %s"% (iso_path,self.getname()),{'style':'NOK'})
-				message ("Reason %s"%output,{'style':'debug'})
-				terminate_self("Exiting..")
+				message ("Reason %s" % response,{'style':'DEBUG'})
+				terminate_self("Exiting.")
+			else :
+				output += response[-80:] + "Success"
 		except Exception :
 			message ("Unable to fetch url %s in host %s"% (iso_path,self.getname()),{'style':'NOK'})
-			terminate_self("Exiting..") 
+			terminate_self("Exiting.") 
 		return output
 	
 	def get_common(self):
@@ -171,8 +196,13 @@ class Host(object):
 	
 	def deleteVMs(self):
 		output = ''
-		for vm_name in self._vms:
-			output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
+		try:
+			for vm_name in self._vms:
+				output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
+			output = str ( output ) + " Success"
+		except Exception:
+			message ( "Cannot delete vms  %s " % output,{'to_trace': '1' ,'style': 'FATAL'}  )
+			output = output + " Failed"
 		return output
 	
 	def declareVMs(self):
@@ -184,23 +214,23 @@ class Host(object):
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "Clone-Volume_Output = %s " % vm.clone_volume()	, {'style': 'INFO'} )
-			message ( "VM-Configure_Output = %s " % vm.configure()		, {'style': 'INFO'} )
-			message ( "VM-SetMfgDB_Output = %s " % vm.set_mfgdb()		, {'style': 'INFO'} )
+			message ( "Clone-Volume_Output = [%s]" % vm.clone_volume()	, {'style': 'INFO'} )
+			message ( "VM-Configure_Output = [%s]" % vm.configure()		, {'style': 'INFO'} )
+			message ( "VM-SetMfgDB_Output = [%s]" % vm.set_mfgdb()		, {'style': 'INFO'} )
 
 	
 	def startVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "VM-Poweron= %s " % vm.power_on()					, {'style': 'INFO'} )
+			message ( "VM-Poweron = [%s]" % vm.power_on()					, {'style': 'INFO'} )
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
 			if vm.ssh_self():
-				message ( "VM-Fetch		= %s " % vm.image_fetch()		, {'style': 'INFO'} )
-				message ( "VM-Install	= %s " % vm.image_install()		, {'style': 'INFO'} )
-				message ( "VM-Reload	= %s " % vm.reload()			, {'style': 'INFO'} )
+				message ( "VM-Fetch		= [%s]" % vm.image_fetch()		, {'style': 'INFO'} )
+				message ( "VM-Install	= [%s]" % vm.image_install()	, {'style': 'INFO'} )
+				message ( "VM-Reload	= [%s]" % vm.reload()			, {'style': 'INFO'} )
 
 if __name__ == '__main__':
     pass

@@ -147,7 +147,7 @@ def sprintf_warning():
     return Fore.CYAN +	Back.BLUE +		Style.BRIGHT +	"WARN" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_debug():
-    return Fore.YELLOW +Back.BLUE +		Style.DIM +		"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
+    return Fore.CYAN +Back.BLACK +		Style.BRIGHT +	"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_fatal():
     return Fore.RED +	Back.YELLOW +	Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "

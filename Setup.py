@@ -163,15 +163,15 @@ def setupClusters(tuples):
 def setupStorage(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up storage inside VM %s"%vm_name, {'style': 'INFO'} )
+		message ( "Now setting up storage inside VM %s" % vm_name, {'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.has_storage():
-				message ("Bring-Strogage_Output = %s " %  vm.bring_storage() ,			{'style': 'INFO'} )
+				message ("Bring-Strogage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
 				if not opt_skip_format :
-					message ( "FormatStorage_Output = %s " % vm.format_storage() ,	{'style': 'INFO'} )
-				message ( "MountStorage_Output = %s " %  vm.mount_storage(),			{'style': 'INFO'} )
-				message ( "Config-Write_Output = %s " %  vm.config_write(),			{'style': 'INFO'} )
+					message ( "FormatStorage_Output = [%s]" % vm.format_storage() ,	{'style': 'INFO'} )
+				message ( "MountStorage_Output = [%s]" % vm.mount_storage(),			{'style': 'INFO'} )
+				message ( "Config-Write_Output = [%s]" % vm.config_write(),			{'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -180,15 +180,27 @@ def setupStorage(tuples):
 def setupHDFS(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up HDFS inside VM %s"%vm_name,{'style': 'INFO'} )
+		message ( "Now setting up HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
-				message ("Setup-HDFS_Output = %s " %  vm.setup_HDFS(),{'style': 'INFO'} )
+				message ("Setup-HDFS_Output = [%s]" % vm.setup_HDFS(),{'style': 'INFO'} )
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 				terminate_self("Exiting")
 	return "Success"
+
+def checkHDFS(tuples):		
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				message ("Check-HDFS_Output = [%s]" % vm.validate_HDFS(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+
 
 def clear_ha(tuples):
 	for line in tuples:
@@ -215,15 +227,14 @@ def manufVMs(host):
 		else :
 			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
 			terminate_self("Template missing in host %s" % host.getname())
-			sys.exit( "Template missing in host %s" % host.getname()) # this should never get executed
 	else:
-		message (  "GetMfgISO_Output = %s " % host.getMfgCd()				,{'style': 'INFO'} )
-		message (  "Delete-Template_Output = %s " % host.delete_template()	,{'style': 'INFO'} )
-		message (  "Create-Template_Output = %s " % host.create_template()	,{'style': 'INFO'} )
-	message ( "DeleteVMs_Output = %s " % host.deleteVMs()					,{'style': 'INFO'} )
-	message ( "DeclareVMs_Output = %s " % host.declareVMs()					,{'style': 'INFO'} )
-	message ( "CreateVMs_Output = %s " % host.instantiateVMs()				,{'style': 'INFO'} )
-	message ( "PowerON-VMs_Output = %s " % host.startVMs()					,{'style': 'INFO'} )
+		message (  "GetMfgISO_Output = [%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
+		message (  "Delete-Template_Output = [%s]"	% host.delete_template()	,{'style': 'INFO'} )
+		message (  "Create-Template_Output = [%s]"	% host.create_template()	,{'style': 'INFO'} )
+	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()		,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
+	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
+	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
 	return "Success"
 
 def validate(config):
@@ -375,6 +386,8 @@ if __name__ == '__main__':
 		setupStorage(allvms)
 	if opt_hdfs is True:
 		setupHDFS(allvms)
+		checkHDFS(allvms)
+		
 	
 	manuf_runtime = time.time() - start_time
 	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),
@@ -389,7 +402,7 @@ if __name__ == '__main__':
 			 {'style' : 'info'}
 			 )
 
-
+	message("-- Script Finished Execution --", { 'style':'ok' } )
 
 # Debug Command
 # pydbgp -d localhost:9001  Setup.py  INIFILE

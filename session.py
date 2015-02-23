@@ -45,12 +45,12 @@ class session(object):
 	
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
-		retry = 0
+		retry = 5
 		self.session = paramiko.SSHClient()
 		self.session.load_host_keys(os.path.expanduser("/dev/null"))
 		#self.session.load_system_host_keys()
 		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-		while retry < 5:
+		while retry > 0:
 			try:
 				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
 				message ( "connect on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
@@ -65,7 +65,7 @@ class session(object):
 			except socket.error, (value):
 				message ( "SSH Connection refused, will retry in 5 seconds", { 'style': 'DEBUG' } )
 				time.sleep(5)
-				retry += 1
+				retry -= 1
 			except paramiko.BadHostKeyException:
 				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, { 'style': 'FATAL' } ) 
 				message ( 'Edit  ~/.ssh/known_hosts file to remove the entry and try again', {'style': 'TRACE'} ) 
@@ -73,7 +73,7 @@ class session(object):
 			except EOFError:
 				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
 				time.sleep(5)
-				retry += 1
+				retry -= 1
 
 	def close(self):
 		self.chan.close()

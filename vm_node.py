@@ -232,17 +232,22 @@ class vm_node(object):
 
 	def configure(self):
 		output = ''
-		output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)
-		output += self._host_ssh_session.executeCli('virt vm %s vcpus count %s' % (self._name,self._cpu) )
-		output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory) )
-		output += self._host_ssh_session.executeCli('virt vm %s storage device bus virtio drive-number 1 source file %s mode read-write' % (self._name,self._diskimage) )
-		output += self._host_ssh_session.executeCli('virt vm %s interface 1  bridge %s' % (self._name,self._brMgmt) )
-		output += self._host_ssh_session.executeCli('virt vm %s interface 1 macaddr %s' % (self._name,self._mgmtMac) )
-		output += self._host_ssh_session.executeCli('virt vm %s interface 2  bridge %s' % (self._name,self._brStor) )
-		output += self._host_ssh_session.executeCli('virt vm %s interface 2 macaddr %s' % (self._name,self._storMac) )    
-		output += self._host_ssh_session.executeCli('virt vm %s comment %s' % (self._name, "\"Manufctd with Image %s\""%self._release_ver ))
-		output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory ))
-		return output
+		try:
+			output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)
+			output += self._host_ssh_session.executeCli('virt vm %s vcpus count %s' % (self._name,self._cpu) )
+			output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory) )
+			output += self._host_ssh_session.executeCli('virt vm %s storage device bus virtio drive-number 1 source file %s mode read-write' % (self._name,self._diskimage) )
+			output += self._host_ssh_session.executeCli('virt vm %s interface 1  bridge %s' % (self._name,self._brMgmt) )
+			output += self._host_ssh_session.executeCli('virt vm %s interface 1 macaddr %s' % (self._name,self._mgmtMac) )
+			output += self._host_ssh_session.executeCli('virt vm %s interface 2  bridge %s' % (self._name,self._brStor) )
+			output += self._host_ssh_session.executeCli('virt vm %s interface 2 macaddr %s' % (self._name,self._storMac) )    
+			output += self._host_ssh_session.executeCli('virt vm %s comment %s' % (self._name, "\"Manufctd with Image %s\""%self._release_ver ))
+			output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory ))
+			output += " Success"
+		except Exception:
+			message ("Failure configuring Err = %s in VM %s" % (output,self._name) ,{'style':'TRACE'})
+			return False
+		return output 
 	
 	def pingable(self,host):  
 		try:
@@ -429,6 +434,44 @@ class vm_node(object):
 		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 
+	def is_ResManUp(self):
+		response = self.get_psef()
+		try:
+			m1 = re.search(ur'^(?P<javaProcess>.*?\/bin\/java\s+-Dproc_resourcemanager[\s+\S+]*?)$',response,re.MULTILINE)
+			if m1:
+				javaProcess = m1.group("javaProcess")
+				return javaProcess
+			else:
+				return False
+		except Exception:
+			message ( "Error matching javaProcess" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
+	def info_yarn_Setup(self):
+		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report') 
+		
+	def validate_HDFS(self):
+		if not self.is_clustermaster():
+			return "Not cluster master. skipping."
+		output = ''
+		retry = 0
+		validate_status = False
+		while retry <= 3:
+			try:
+				if self.is_ResManUp():
+					message ("Resource Manager is up in %s" % self._name, {'style':'ok'} )
+					output += self.info_yarn_Setup()
+					validate_status = True
+					break
+				else:
+					retry += 1
+					message ("Try %s. Resource Manager is not running. Waiting 5 min" % retry, {'style':'WARNING'})
+					time.sleep(300)
+			except Exception:
+				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
+				return False
+		return output
+
 	def has_storage(self):
 		return self._initiatorname_iscsi
 	
@@ -441,6 +484,13 @@ class vm_node(object):
 		time.sleep(15)
 		output += self._ssh_session.executeCli('tps multipath renew ')
 		return output
+	
+	def get_psef(self):
+		output = ''
+		output += self._ssh_session.executeCli("cli session terminal width 999")
+		output += self._ssh_session.executeCli('_exec /bin/ps -ef')
+		return output
+
 
 	def remove_storage(self):
 		output = ''
@@ -528,6 +578,14 @@ class vm_node(object):
 		if not self.is_clusternode():
 			return False
 		return session.executeCli('no cluster enable')
+	
+	def is_clustermaster(self):
+		output = ''
+		output += self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/master')
+		if output.find("true") != -1:
+			return True
+		else:
+			return False
 
 	def set_clusterMaster(self):
 		output = ''
