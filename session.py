@@ -29,6 +29,9 @@ class session(object):
 		self._stdin 				= None
 		self._stdout 				= None
 		self._stderr 				= None
+		self.session				= None
+		self.transport				= None
+		self.chan					= None
 		self.newline 				= "\n"
 		self.current_send_string	= ''
 		if host and username and password:
@@ -309,6 +312,45 @@ class session(object):
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
+
+	def transferFile(self,local_file,dir_remote,perm=0755):
+		"""
+		self._ssh_session.transferFile(local_file,dir_remote)
+		"""
+		sftp = paramiko.SFTPClient.from_transport(self.transport)
+		#try:
+		#	sftp.mkdir(dir_remote)
+		#except IOError, e:
+		#	mesg =  '(assuming ', dir_remote, 'exists)', e
+		#	message ( mesg,  {'style': 'DEBUG'}  )
+		#
+		is_up_to_date = False
+		fname = os.path.basename(os.path.abspath(local_file))
+		dir_local = os.path.dirname(os.path.abspath(local_file))
+		remote_file = dir_remote + '/' + os.path.basename(os.path.abspath(fname))
+		# Todo fix below code to include paramiko.sftp_file.SFTPFile.check(md5) function.
+		try:
+			if sftp.stat(remote_file):
+				local_file_data = open(local_file, "rb").read()
+				remote_file_data = sftp.open(remote_file).read()
+				md1 = md5.new(local_file_data).digest()
+				md2 = md5.new(remote_file_data).digest()
+				if md1 == md2:
+					is_up_to_date = True
+					message ( "UNCHANGED %s" % os.path.basename(fname),  {'style': 'debug'}  )
+					sftp.chmod (remote_file,perm)
+					return
+				else:
+					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'info'}  )
+		except:
+			message ( "NEW %s" % os.path.basename(fname),  {'style': 'info'}  )
+
+		if not is_up_to_date:
+			sftp.put(local_file, remote_file)
+			sftp.chmod (remote_file,perm)
+			message ( "Copied file  %s to %s" % (local_file,remote_file),  {'style': 'debug'}  )
+			#except :
+			#	message ( "Cannot copy file %s from % to %s" % (fname,dir_local,dir_remote),  {'style': 'nok'}  )
 
 	def write(self, cmd):
 		timeOut = 60

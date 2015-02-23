@@ -454,9 +454,10 @@ class vm_node(object):
 		if self.is_clusternode() and not self.is_clustermaster():
 			return "Part of Cluster but not master. skipping node %s" % self._name
 		output = ''
+		response = ''
 		retry = 0
 		validate_status = False
-		while retry <= 3:
+		while retry <= 15:
 			try:
 				if self.is_ResManUp():
 					message ("Resource Manager is up in %s" % self._name, {'style':'ok'} )
@@ -465,12 +466,33 @@ class vm_node(object):
 					break
 				else:
 					retry += 1
-					message ("Try %s. Resource Manager is not running. Waiting 5 min" % retry, {'style':'WARNING'})
-					time.sleep(300)
+					message ("Try %s. Resource Manager is not running. Waiting total 15 min" % retry, {'style':'WARNING'})
+					time.sleep(60)
 			except Exception:
 				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
 				return False
+		
+		message ("Now HDFS config report", {'style':'INFO'})
+		response += str(self.hdfs_report())
+		if response.find('ERROR') != -1 :
+			message ("HDFS Report = %s" % response ,{'style':'NOK'} )
+		else :
+			message ("HDFS Report = %s" % response ,{'style':'OK'} )
 		return output
+
+	def hdfs_report(self):
+		output = ''
+		checkScript = os.environ["INSTALL_PATH"] + "/" + "extras/yarn-config-check.sh"
+		#try :
+		self._ssh_session.transferFile(checkScript,"/tmp")
+		#except Exception:
+		#	message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s" % self._name ,{'style':'NOK'})
+		#	return False
+		try:
+			output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
+			return output
+		except Exception:
+			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
 
 	def has_storage(self):
 		return self._initiatorname_iscsi

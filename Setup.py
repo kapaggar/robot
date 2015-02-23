@@ -261,7 +261,9 @@ Steps:
 8. On All VMs Setup Yarn config if present
 9. Connect to Hosts and upgrade VMs  ( parallely in threads - 1 per Host)
 '''
-if __name__ == '__main__':	
+if __name__ == '__main__':
+	install_path		=	os.path.dirname(__file__)
+	os.environ["INSTALL_PATH"] = install_path
 	########################################################
 	#     MAIN
 	########################################################
