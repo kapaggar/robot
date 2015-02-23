@@ -136,9 +136,9 @@ class Host(object):
 		output = ''
 		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._template_file)
 		if output.find("No such file or directory") != -1:
-			return True
-		else :
 			return False
+		else :
+			return True
 		
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
