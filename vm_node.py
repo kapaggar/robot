@@ -451,8 +451,8 @@ class vm_node(object):
 		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report') 
 		
 	def validate_HDFS(self):
-		if not self.is_clustermaster():
-			return "Not cluster master. skipping."
+		if self.is_clusternode() and not self.is_clustermaster():
+			return "Part of Cluster but not master. skipping node %s" % self._name
 		output = ''
 		retry = 0
 		validate_status = False
