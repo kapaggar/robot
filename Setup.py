@@ -201,6 +201,16 @@ def checkHDFS(tuples):
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 
+def config_collector(tuples):		
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now configuring collector basics inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 
 def clear_ha(tuples):
 	for line in tuples:
@@ -318,7 +328,12 @@ if __name__ == '__main__':
 						dest='wipe_host',
 						action='store_true',
 						default=False,
-						help='First delete Host VM-Pool')
+						help='Delete Host\'s complete VM-Pool in initialisation')
+	parser.add_argument("--no-backup-hdfs",
+						dest='backup_hdfs',
+						action='store_false',
+						default=True,
+						help='Skip configuring backup hdfs if configuring yarn')
 	parser.add_argument("--skip-vm",
 						nargs='+',
 						dest='skip_vm',
@@ -326,16 +341,18 @@ if __name__ == '__main__':
 						help='TOBE_IMPLEMENTED skip vm in ini with these names')
 
 	args = parser.parse_args()
-	config_filename = args.INIFILE[0]
-	opt_skip_format = args.skip_format
-	opt_force_format= args.force_format
-	opt_storage		= args.storage
-	opt_ha			= args.setup_ha
-	opt_hdfs		= args.setup_hdfs
-	opt_wipe		= args.wipe_host
-	opt_skipvm		= args.skip_vm
-	opt_lazy		= args.lazy
-	opt_reconfig	= args.reconfig
+	config_filename 		= args.INIFILE[0]
+	opt_skip_format 		= args.skip_format
+	opt_force_format		= args.force_format
+	opt_storage				= args.storage
+	opt_ha					= args.setup_ha
+	opt_hdfs				= args.setup_hdfs
+	opt_wipe				= args.wipe_host
+	opt_skipvm				= args.skip_vm
+	opt_lazy				= args.lazy
+	opt_reconfig			= args.reconfig
+	opt_backuphdfs			= args.backup_hdfs
+	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
 	allvms = None
 	if args.log:
 		os.environ["LOGFILE_NAME"] = args.log[0]
@@ -389,6 +406,7 @@ if __name__ == '__main__':
 	if opt_hdfs is True:
 		setupHDFS(allvms)
 		checkHDFS(allvms)
+		config_collector(allvms)
 		
 	
 	manuf_runtime = time.time() - start_time
