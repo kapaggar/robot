@@ -429,6 +429,12 @@ class vm_node(object):
 
 		cmd += "set hadoop_yarn client %s \n" % client_ip
 		cmd += "set hadoop_yarn state UNINIT \n"
+		
+		if os.environ['BACKUP_HDFS'] :
+			cmd += "register backup_hdfs \n"
+			cmd += "set backup_hdfs namenode UNINIT \n"
+			cmd += "set backup_hdfs version HADOOP_YARN \n"
+			
 		output += self._ssh_session.executePmx(cmd)
 		output += self._ssh_session.executeCli('pm process tps restart')
 		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
@@ -493,6 +499,20 @@ class vm_node(object):
 			return output
 		except Exception:
 			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
+
+	def col_basic(self):
+		output = ''
+		try:
+			output += self._ssh_session.executeCli('pm process collector launch enable')
+			output += self._ssh_session.executeCli('pm process collector launch relaunch auto')
+			output += self._ssh_session.executeCli('pm process collector launch auto')
+			output += self._ssh_session.executeCli('pm liveness grace-period 600')
+			output += self._ssh_session.executeCli('internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
+			outout += " Success"
+		except Exception:
+			message ("Failed in config_collector" ,{'style':'NOK'})
+			return "Failed"
+		return output
 
 	def has_storage(self):
 		return self._initiatorname_iscsi

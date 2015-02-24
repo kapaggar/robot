@@ -137,19 +137,19 @@ class session(object):
 	def tellPrompt(self,line):
 		try:
 			if self.getshellPrompt(line):
-				message ( "In shell prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In shell prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "shell"
 			elif self.getcliPrompt(line):
-				message ( "In cli prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In cli prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "cli"
 			elif self.getenPrompt(line):
-				message ( "In en prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In en prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "en"
 			elif self.getLoginPrompt(line):
-				message ( "In login prompt in %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In login prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "login"
 			elif line.find("pm extension>") != -1:
-				message ( "In pmx prompt %s in " % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In pmx prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return "pmx"
 			else:
 				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
