@@ -508,7 +508,7 @@ class vm_node(object):
 			output += self._ssh_session.executeCli('pm process collector launch auto')
 			output += self._ssh_session.executeCli('pm liveness grace-period 600')
 			output += self._ssh_session.executeCli('internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
-			outout += " Success"
+			output += " Success"
 		except Exception:
 			message ("Failed in config_collector" ,{'style':'NOK'})
 			return "Failed"
