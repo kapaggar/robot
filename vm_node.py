@@ -7,7 +7,7 @@ import commands
 import os,sys
 import random
 from session import session
-from Toolkit import message,terminate_self
+from Toolkit import message,terminate_self,clear_collector_logs
 
 class vm_node(object):
 	nodes_ip = {}
@@ -453,6 +453,19 @@ class vm_node(object):
 			message ( "Error matching javaProcess" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
+	def collector_sanity(self):
+		from subprocess import Popen, PIPE
+		if self.is_clusternode() and not self.is_clustermaster():
+			return "Part of Cluster but not master. skipping node %s" % self._name
+		output = ''
+		sanity_script = "collector_sanity.py"
+		test_suite_path = os.environ["INSTALL_PATH"]  + "/" + "hubrix/GuavusAutomationPlatform/test_suite"
+		clear_collector_logs()
+		message ("Starting collector sanity in %s" % self._name, 		{'style':'INFO'} )
+		output += Popen("python " + sanity_script + " -i " + self._ip , cwd=test_suite_path,shell=True, stdout=PIPE).communicate()[0]
+		message ("Collector Sanity is complete in %s" % self._name, 	{'style':'OK'} )
+		return output
+
 	def info_yarn_Setup(self):
 		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report') 
 		
@@ -489,7 +502,7 @@ class vm_node(object):
 
 	def hdfs_report(self):
 		output = ''
-		checkScript = os.environ["INSTALL_PATH"] + "/" + "extras/yarn-config-check.sh"
+		checkScript = os.environ["ROBOT_PATH"] + "/" + "extras/yarn-config-check.sh"
 		#try :
 		self._ssh_session.transferFile(checkScript,"/tmp")
 		#except Exception:

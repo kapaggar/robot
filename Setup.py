@@ -10,7 +10,7 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message,notify_email,terminate_self
+from Toolkit import message,notify_email,terminate_self,collect_results,collector_results,clean_results
 from pprint import pprint
 
 def connect_hosts (hosts):
@@ -206,6 +206,21 @@ def checkHDFS(tuples):
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 	return output
 
+def checkColSanity(tuples):
+	output = ''
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking collector sanity inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				response = vm.collector_sanity()
+				message ("CollectorSanity_Output = [%s]" % response,{'style': 'INFO'} )
+				output += response
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
+
 def config_collector(tuples):		
 	for line in tuples:
 		host,vm_name = line.split(":")
@@ -276,8 +291,9 @@ Steps:
 9. Connect to Hosts and upgrade VMs  ( parallely in threads - 1 per Host)
 '''
 if __name__ == '__main__':
-	install_path		=	os.path.dirname(__file__)
-	os.environ["INSTALL_PATH"] = install_path
+	robot_path		=	os.path.dirname(__file__)
+	os.environ["ROBOT_PATH"] = os.path.abspath(robot_path)
+	os.environ["INSTALL_PATH"] = os.path.dirname(os.environ["ROBOT_PATH"])
 	########################################################
 	#     MAIN
 	########################################################
@@ -338,6 +354,11 @@ if __name__ == '__main__':
 						action='store_false',
 						default=True,
 						help='Skip configuring backup hdfs if configuring yarn')
+	parser.add_argument("--col-sanity",
+						dest='col_sanity',
+						action='store_true',
+						default=False,
+						help='Execute Collector Sanity test-suite')
 	parser.add_argument("--email",
 						dest='email',
 						action='store_true',
@@ -361,6 +382,7 @@ if __name__ == '__main__':
 	opt_lazy				= args.lazy
 	opt_reconfig			= args.reconfig
 	opt_backuphdfs			= args.backup_hdfs
+	opt_colsanity			= args.col_sanity
 	opt_email				= args.email
 	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
 	allvms = None
@@ -418,12 +440,19 @@ if __name__ == '__main__':
 		
 	if opt_email:
 		message ('Sending out emails: ' ,{'style' : 'info'})
-		notify_email(config,hdfs_report)
+		attachment = collect_results()
+		notify_email(config,hdfs_report,attachment)
+		clean_results(attachment)
 	else :
 		message ('Not sending out emails' ,{'style' : 'info'})
 
 	manuf_runtime = time.time() - start_time
 	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
+	if opt_colsanity :
+		checkColSanity(allvms)
+		attachment = collector_results()
+		notify_email(config,"Collector Sanity Report",attachment)
+		clean_results(attachment)
 
 	if 'upgrade' in install_type:
 		do_upgrade()
@@ -437,6 +466,7 @@ if __name__ == '__main__':
 # pydbgp -d localhost:9001  Setup.py  INIFILE
 
 #TODO
+# FIX in case of --no-ha unregister cluster not called
 # Exception if there is one "virt volume fetch url" already running on Host system.retry after 5 min
 # Validate iso and img files are present and are iso & image files
 # validate other config.spec parameters.

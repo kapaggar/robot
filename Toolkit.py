@@ -2,6 +2,7 @@ import re
 import os, sys
 import time
 import signal
+import tarfile
 import __main__ as main
 from Email import Email
 from colorama import Fore, Back, Style
@@ -58,15 +59,21 @@ def append_to_file(logfile_name,string_to_append):
         with open(logfile_name, "w+") as logfile:
             logfile.write(string_to_append)
 
-def clean_results():
-	global result_file
+def clean_results(file_name):
+	if not file_name:
+		return
+	if not os.path.exists(file_name):
+		print "File '%s' does not exist. Already cleaned ?" % file_name
+		return 
+	if not os.path.isfile(file_name):
+		print "Attachment '%s' is not a file.  Not deleting" % file_name
+		return
 	try:
-		os.remove(result_file)
+		os.remove(file_name)
 	except Exception:
-		message("Unable to remove result_file %s" % result_file ,{'style':'FATAL'})
+		message("Unable to remove file %s" % file_name ,{'style':'FATAL'})
 	
 def collect_results():
-	import tarfile
 	global tracefile_name
 	global logfile_name
 	global result_file
@@ -82,7 +89,32 @@ def collect_results():
 		message("Unable to make tar for writing",{'style':'FATAL'})
 		return False
 
-	
+def clear_collector_logs():
+	CommonLogs_path = os.environ["INSTALL_PATH"]  + "/" + "hubrix/GData/Logs/CommonLogs"
+	oldpwd = os.getcwd() 
+	os.chdir(CommonLogs_path)
+	filelist = [ f for f in os.listdir(CommonLogs_path) if f.endswith(".log") ]
+	for f in filelist:
+		os.remove(f)
+	os.chdir(oldpwd)
+		
+def collector_results():
+	result_file_ext = ".tgz"
+	result_file = "collector_sanity_logs" + result_file_ext
+	Logs_path = os.environ["INSTALL_PATH"]  + "/" + "hubrix/GData/Logs/"
+	message ("Collector sanity logs are placed in %s" % Logs_path ,{'style' : 'info'})
+	try:
+		old_pwd = os.getcwd()
+		os.chdir(Logs_path)
+		tar = tarfile.open(result_file, "w:gz")
+		tar.add("CommonLogs")
+		tar.close()
+		os.chdir(old_pwd)
+		return Logs_path + result_file
+	except Exception:
+		message("Unable to make tar for writing",{'style':'FATAL'})
+		return False
+
 def get_system_date():
     now = time.strftime("%c")
     return now
@@ -115,24 +147,6 @@ def initialise_log_trace_and_truncate(logfile_name):
 	except IOError:
 		message("Unable to truncate tracefile for writing",{'style':'FATAL'})
 		terminate_self("Exiting")
-
-def notify_email(config,msg):
-	notifyFrom		= config['HOSTS']['notifyFrom']
-	notifyTo		= config['HOSTS']['notifyTo']
-	email_msg 		= "logfile and trace file for the run attached\n"
-	email_msg 		+= "\nHadoop Report\n"
-	email_msg 		+= "=================="
-	email_msg		+= str(msg)
-	notify 			= Email("mx1.guavus.com")
-	notify.setFrom(notifyFrom)
-	for email_address in notifyTo:
-		notify.addRecipient(email_address)
-	notify.setSubject("Hubrix notification")
-	notify.setTextBody(email_msg)
-	attachment = collect_results()
-	if attachment:
-		notify.addAttachment(attachment)
-	notify.send()
 
 def message(message_string,arg_ref):
 	"""
@@ -174,6 +188,22 @@ def message(message_string,arg_ref):
 		append_to_log ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
 		append_to_trace ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
+
+def notify_email(config,msg,attachment=None):
+	notifyFrom		= config['HOSTS']['notifyFrom']
+	notifyTo		= config['HOSTS']['notifyTo']
+	email_msg 		= "\n\tlogfile and trace file for the run attached\n"
+	email_msg 		+= "\t==================\n"
+	email_msg		+= str(msg)
+	notify 			= Email("mx1.guavus.com")
+	notify.setFrom(notifyFrom)
+	for email_address in notifyTo:
+		notify.addRecipient(email_address)
+	notify.setSubject("Hubrix notification")
+	notify.setTextBody(email_msg)
+	if attachment:
+		notify.addAttachment(attachment)
+	notify.send()
 
 def sprintf_timestamped(string):
     timestamped_string = ''
