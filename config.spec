@@ -8,6 +8,8 @@ install_type = string(default  = manufacture)
 ntp_server = ip_addr( default = 198.55.111.5)
 yarn_nameservice = string( default = JeSuisYarn )
 snmpsink_server = ip_addr
+notifyFrom = string(default = Hubrix<kapil.aggarwal@guavus.com>)
+notifyTo = string_list(min=0, max=10, default = list('kapil.aggarwal@guavus.com'))
 
 [[__many__]]
 ip = ip_addr

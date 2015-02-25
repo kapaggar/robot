@@ -3,10 +3,89 @@ import os, sys
 import time
 import signal
 import __main__ as main
+from Email import Email
 from colorama import Fore, Back, Style
 
-logfile_name = ''
-tracefile_name = ''
+logfile_name	= ''
+tracefile_name	= ''
+result_file		= ''
+
+def append_to_trace(string_to_append):
+	"""
+	Append_to_trace(string_to_append)
+	"""
+	global tracefile_name
+	if not string_to_append:
+		return 1
+	if not tracefile_name:
+		try:
+			if os.environ["TRACEFILE_NAME"]:
+				tracefile_name = os.environ["TRACEFILE_NAME"]
+		except KeyError:
+			my_script		=	os.path.basename(main.__file__)
+			my_prefix		=	my_script.split('.')[0]
+			my_timestamp	=	time.strftime("%Y%m%d-%H%M%S")
+			my_suffix		=	"tra"
+			tracefile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
+	append_to_file(tracefile_name,string_to_append)
+
+def append_to_log(string_to_append):
+	"""
+	Append_to_log(string_to_append)
+	"""
+	global logfile_name
+	if not string_to_append:
+		return 1
+	if not logfile_name:
+		try:
+			if os.environ["LOGFILE_NAME"]:
+				logfile_name = os.environ["LOGFILE_NAME"]
+		except KeyError:
+			my_script		=	os.path.basename(main.__file__)
+			my_prefix		=	my_script.split('.')[0]
+			my_timestamp	=	time.strftime("%Y%m%d-%H%M%S")
+			my_suffix		=	"log"
+			logfile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
+		initialise_log_trace_and_truncate(logfile_name)
+	append_to_file(logfile_name,string_to_append)
+
+def append_to_file(logfile_name,string_to_append):
+    try:
+        with open(logfile_name, "a") as logfile:
+            logfile.write(string_to_append)
+            logfile.close()
+    except IOError:
+        with open(logfile_name, "w+") as logfile:
+            logfile.write(string_to_append)
+
+def clean_results():
+	global result_file
+	try:
+		os.remove(result_file)
+	except Exception:
+		message("Unable to remove result_file %s" % result_file ,{'style':'FATAL'})
+	
+def collect_results():
+	import tarfile
+	global tracefile_name
+	global logfile_name
+	global result_file
+	result_file_ext = ".tgz"
+	result_file = os.path.splitext(logfile_name)[0] + result_file_ext
+	try:
+		tar = tarfile.open(result_file, "w:gz")
+		for name in [tracefile_name, logfile_name]:
+			tar.add(name)
+		tar.close()
+		return result_file
+	except Exception:
+		message("Unable to make tar for writing",{'style':'FATAL'})
+		return False
+
+	
+def get_system_date():
+    now = time.strftime("%c")
+    return now
 
 def initialise_log_trace_and_truncate(logfile_name):
 	'''
@@ -36,6 +115,24 @@ def initialise_log_trace_and_truncate(logfile_name):
 	except IOError:
 		message("Unable to truncate tracefile for writing",{'style':'FATAL'})
 		terminate_self("Exiting")
+
+def notify_email(config,msg):
+	notifyFrom		= config['HOSTS']['notifyFrom']
+	notifyTo		= config['HOSTS']['notifyTo']
+	email_msg 		= "logfile and trace file for the run attached\n"
+	email_msg 		+= "\nHadoop Report\n"
+	email_msg 		+= "=================="
+	email_msg		+= str(msg)
+	notify 			= Email("mx1.guavus.com")
+	notify.setFrom(notifyFrom)
+	for email_address in notifyTo:
+		notify.addRecipient(email_address)
+	notify.setSubject("Hubrix notification")
+	notify.setTextBody(email_msg)
+	attachment = collect_results()
+	if attachment:
+		notify.addAttachment(attachment)
+	notify.send()
 
 def message(message_string,arg_ref):
 	"""
@@ -78,55 +175,6 @@ def message(message_string,arg_ref):
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
 		append_to_trace ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 
-def append_to_trace(string_to_append):
-	"""
-	Append_to_trace(string_to_append)
-	"""
-	global tracefile_name
-	if not string_to_append:
-		return 1
-	if not tracefile_name:
-		try:
-			if os.environ["TRACEFILE_NAME"]:
-				tracefile_name = os.environ["TRACEFILE_NAME"]
-		except KeyError:
-			my_script		=	os.path.basename(main.__file__)
-			my_prefix		=	my_script.split('.')[0]
-			my_timestamp	=	time.strftime("%Y%m%d-%H%M%S")
-			my_suffix		=	"tra"
-			tracefile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
-	append_to_file(tracefile_name,string_to_append)
-
-def append_to_log(string_to_append):
-	"""
-	Append_to_log(string_to_append)
-	"""
-	global logfile_name
-	if not string_to_append:
-		return 1
-	if not logfile_name:
-		try:
-			if os.environ["LOGFILE_NAME"]:
-				logfile_name = os.environ["LOGFILE_NAME"]
-		except KeyError:
-			my_script		=	os.path.basename(main.__file__)
-			my_prefix		=	my_script.split('.')[0]
-			my_timestamp	=	time.strftime("%Y%m%d-%H%M%S")
-			my_suffix		=	"log"
-			logfile_name	=	my_prefix + "." + my_timestamp  + "." + my_suffix
-		initialise_log_trace_and_truncate(logfile_name)
-	append_to_file(logfile_name,string_to_append)
-
-
-def append_to_file(logfile_name,string_to_append):
-    try:
-        with open(logfile_name, "a") as logfile:
-            logfile.write(string_to_append)
-            logfile.close()
-    except IOError:
-        with open(logfile_name, "w+") as logfile:
-            logfile.write(string_to_append)
-
 def sprintf_timestamped(string):
     timestamped_string = ''
     strings = map(str.strip, string.split('\n'))
@@ -161,10 +209,6 @@ def sprintf_trace():
 def sprintf_nocolor(string):
     regex = re.compile(ur'\x1B\[([0-9]{0,2}(;[0-9]{0,2})?)?[m|K]', re.UNICODE)
     return re.sub(regex,"", string)
-
-def get_system_date():
-    now = time.strftime("%c")
-    return now
 
 def terminate_self(mesg):
     if mesg :

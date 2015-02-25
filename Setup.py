@@ -5,12 +5,13 @@ import signal
 import re
 import datetime
 import argparse
+import threading
 from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message,terminate_self
-import threading
+from Toolkit import message,notify_email,terminate_self
+from pprint import pprint
 
 def connect_hosts (hosts):
 	for host_name in hosts:
@@ -190,16 +191,20 @@ def setupHDFS(tuples):
 				terminate_self("Exiting")
 	return "Success"
 
-def checkHDFS(tuples):		
+def checkHDFS(tuples):
+	output = ''
 	for line in tuples:
 		host,vm_name = line.split(":")
 		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
-				message ("Check-HDFS_Output = [%s]" % vm.validate_HDFS(),{'style': 'INFO'} )
+				response = vm.validate_HDFS()
+				message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+				output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
 
 def config_collector(tuples):		
 	for line in tuples:
@@ -255,10 +260,9 @@ def validate(config):
 			if key is not None:
 				message ( 'The "%s" key in the section "%s" failed validation' % (key, ', '.join(section_list)), {'style':'DEBUG'} )
 			else:
-				message ( 'The following section was missing:%s ' % ", ".join(section_list)   , {'style':'DEBUG'} )
+				message ( 'The following section was missing:%s ' % ", ".join(section_list) , {'style':'DEBUG'} )
 		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
 		terminate_self("Exiting.")
-
 '''
 Steps:
 1. Take Config as Input
@@ -334,6 +338,11 @@ if __name__ == '__main__':
 						action='store_false',
 						default=True,
 						help='Skip configuring backup hdfs if configuring yarn')
+	parser.add_argument("--email",
+						dest='email',
+						action='store_true',
+						default=False,
+						help='Send results and report in email')
 	parser.add_argument("--skip-vm",
 						nargs='+',
 						dest='skip_vm',
@@ -352,14 +361,13 @@ if __name__ == '__main__':
 	opt_lazy				= args.lazy
 	opt_reconfig			= args.reconfig
 	opt_backuphdfs			= args.backup_hdfs
+	opt_email				= args.email
 	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
 	allvms = None
 	if args.log:
 		os.environ["LOGFILE_NAME"] = args.log[0]
-	message ("Got input file as %s "%config_filename,
-			 {'to_stdout' : 1, 'to_log' : 1, 'style' : 'info'}
-			 )	
-
+		
+	message ("Got input file as %s " % config_filename,{'to_stdout' : 1, 'to_log' : 1, 'style' : 'INFO'})	
 	configspec='config.spec'
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
@@ -405,22 +413,23 @@ if __name__ == '__main__':
 		setupStorage(allvms)
 	if opt_hdfs is True:
 		setupHDFS(allvms)
-		checkHDFS(allvms)
+		hdfs_report = checkHDFS(allvms)
 		config_collector(allvms)
 		
-	
+	if opt_email:
+		message ('Sending out emails: ' ,{'style' : 'info'})
+		notify_email(config,hdfs_report)
+	else :
+		message ('Not sending out emails' ,{'style' : 'info'})
+
 	manuf_runtime = time.time() - start_time
-	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),
-			 {'style' : 'info'}
-			 )
+	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
 
 	if 'upgrade' in install_type:
 		do_upgrade()
 
 	total_runtime = time.time() - start_time
-	message ('Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),
-			 {'style' : 'info'}
-			 )
+	message ('Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),		{'style' : 'info'})
 
 	message("-- Script Finished Execution --", { 'style':'ok' } )
 

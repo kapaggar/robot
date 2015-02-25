@@ -460,7 +460,7 @@ class vm_node(object):
 		if self.is_clusternode() and not self.is_clustermaster():
 			return "Part of Cluster but not master. skipping node %s" % self._name
 		output = ''
-		response = ''
+		report = ''
 		retry = 0
 		validate_status = False
 		while retry <= 15:
@@ -479,11 +479,12 @@ class vm_node(object):
 				return False
 		
 		message ("Now HDFS config report", {'style':'INFO'})
-		response += str(self.hdfs_report())
-		if response.find('ERROR') != -1 :
-			message ("HDFS Report = %s" % response ,{'style':'NOK'} )
+		report += str(self.hdfs_report())
+		if report.find('ERROR') != -1 :
+			message ("HDFS Report = %s" % report ,{'style':'NOK'} )
 		else :
-			message ("HDFS Report = %s" % response ,{'style':'OK'} )
+			message ("HDFS Report = %s" % report ,{'style':'OK'} )
+		output += report 
 		return output
 
 	def hdfs_report(self):
