@@ -569,7 +569,7 @@ class vm_node(object):
 			ini_format_option = self._tps_fs[fs_name]['format']
 			if ini_format_option is False:
 				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
-				return
+				continue
 			
 			count = 10
 			wwid = self._tps_fs[fs_name]['wwid'].lower()

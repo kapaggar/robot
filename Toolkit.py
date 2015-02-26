@@ -4,6 +4,7 @@ import time
 import signal
 import tarfile
 import __main__ as main
+from urlgrabber import urlopen,grabber
 from Email import Email
 from colorama import Fore, Back, Style
 
@@ -58,6 +59,39 @@ def append_to_file(logfile_name,string_to_append):
     except IOError:
         with open(logfile_name, "w+") as logfile:
             logfile.write(string_to_append)
+
+def check_iso_exists(config):
+	_iso_path	= config['HOSTS']['iso_path']
+	if _iso_path == "nightly" :
+		nightly_base_dir = config['HOSTS']['nightly_dir']
+		try:
+			full_iso_path = get_nightly (nightly_base_dir)
+			return full_iso_path
+		except Exception:
+			message("Unable to get nightly from %s" % nightly_base_dir ,{'style':'FATAL'})
+			return False
+	elif _iso_path is not None:
+		if not _iso_path.endswith(".iso"):
+			message("IMG provided instead of ISO file %s" % _iso_path ,{'style':'FATAL'})
+		base_dir = os.path.dirname(_iso_path)
+		iso_name = os.path.basename(_iso_path)
+		try:
+			page = urlopen(base_dir)
+		except grabber.URLGrabError as e:
+			message("Unable to get iso from %s" % base_dir ,{'style':'FATAL'})
+			return False
+		page_read = page.read()
+		re_mfgiso = re.compile( r"(?P<mfgiso>"+ iso_name + ")",re.M)
+		match = re_mfgiso.search(page_read)
+		if match:
+			iso_filename = match.group("mfgiso")
+			return iso_filename
+		else :
+			message("Unable to get iso from %s" % base_dir ,{'style':'FATAL'})
+			return False
+	else:
+		message("Please correct nightly field in input ini file %s" ,{'style':'FATAL'})
+		return False
 
 def clean_results(file_name):
 	if not file_name:
@@ -114,6 +148,20 @@ def collector_results():
 	except Exception:
 		message("Unable to make tar for writing",{'style':'FATAL'})
 		return False
+
+def get_nightly(base_path):
+	re_mfgiso = re.compile( r"(?P<mfgiso>mfgcd-\S+?.iso)",re.M)
+	try:
+		page = urlopen(base_path)
+	except grabber.URLGrabError as e:
+		raise IOError
+		return False
+	page_read = page.read()
+	match = re_mfgiso.search(page_read)
+	if match:
+		iso_filename = match.group("mfgiso")
+		return base_path + "/" + iso_filename
+	return False
 
 def get_system_date():
     now = time.strftime("%c")

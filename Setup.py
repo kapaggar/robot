@@ -10,8 +10,10 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message,notify_email,terminate_self,collect_results,collector_results,clean_results
+from Toolkit import message,notify_email,terminate_self,collect_results,collector_results,clean_results,check_iso_exists
 from pprint import pprint
+
+hosts = list()
 
 def connect_hosts (hosts):
 	for host_name in hosts:
@@ -39,21 +41,24 @@ def get_allvms(config):
 def exit_cleanup(signal, frame):
 	message ( 'Caught signal %s.. Cleaning Up'% signal, {'style': 'INFO'} ) 
 	for host_name in hosts:
-		if config['HOSTS'][host_name]['host_ref']:
-			host = config['HOSTS'][host_name]['host_ref']
-			for vm in host.get_vms() :
+		try :
+			if config['HOSTS'][host_name]['host_ref']:
+				host = config['HOSTS'][host_name]['host_ref']
+				for vm in host.get_vms() :
+					try:
+						vm_ref = config['HOSTS'][host][vm]['vm_ref']
+						del vm_ref
+					except Exception:
+						message( "VM reference %s already clean"% vm , { 'to_log':1 } )
 				try:
-					vm_ref = config['HOSTS'][host][vm]['vm_ref']
-					del vm_ref
+					del config['HOSTS'][host_name]['host_ref']
+					break
 				except Exception:
-					message( "VM reference %s already clean"% vm , { 'to_log':1 } )
-			try:
-				del config['HOSTS'][host_name]['host_ref']
-				break
-			except Exception:
-				message ( "Host reference %s already clean"% host_name , {'style': 'OK'} )
-			else:
-				message ( "Host %s untouched"% host_name , {'style': 'OK'} )
+					message ( "Host reference %s already clean"% host_name , {'style': 'OK'} )
+				else:
+					message ( "Host %s untouched"% host_name , {'style': 'OK'} )
+		except Exception:
+			message ( 'Nothing to clean', {'style': 'INFO'} )
 	sys.exit("Cleaned")
 	os._exit()
 
@@ -402,7 +407,13 @@ if __name__ == '__main__':
 	if opt_wipe and opt_reconfig:
 		message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
 		sys.exit(1)
-	
+	if not opt_lazy and not opt_reconfig :
+		message ( "Verifying iso exists that will be used for template ",			{'style':'INFO'} )
+		if not check_iso_exists(config):
+			terminate_self("Cannot proceed further as iso not present")
+		else:
+			message ( "ISO url valid . Will make a template",						{'style':'INFO'} )
+
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
 	

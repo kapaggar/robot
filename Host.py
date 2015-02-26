@@ -2,8 +2,7 @@
 import re
 from session import session
 from vm_node import vm_node
-from Toolkit import message,terminate_self
-from urlgrabber import urlopen,grabber
+from Toolkit import message,terminate_self,get_nightly
 from os.path import basename
 
 ######################################################
@@ -114,7 +113,7 @@ class Host(object):
 		output = ''
 		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
-		message ( "create_template iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'TRACE'}  )
+		message ( "Making template from iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
 		iso_name = basename(iso_path)
 		try:
 			output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
@@ -143,24 +142,10 @@ class Host(object):
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
 			nightly_base_dir = self.config['HOSTS']['nightly_dir']
-			full_iso_path = self.get_nightly (nightly_base_dir)
+			full_iso_path = get_nightly (nightly_base_dir)
 			return full_iso_path
 		elif self._iso_path is not None:
 			return self._iso_path
-
-	def get_nightly(self,base_path):
-		re_mfgiso = re.compile( r"(?P<mfgiso>mfgcd-\S+?.iso)",re.M)
-		try:
-			page = urlopen(base_path)
-		except grabber.URLGrabError as e:
-			raise IOError
-			sys.exit(1)
-		page_read = page.read()
-		match = re_mfgiso.search(page_read)
-		if match:
-			iso_filename = match.group("mfgiso")
-			return base_path + "/" + iso_filename
-		return False
 	
 	def getMfgCd(self):
 		output = ''
