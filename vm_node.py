@@ -85,149 +85,57 @@ class vm_node(object):
 		except Exception :
 				message ( "Unable to get a free loop device on Host", {'style': 'FATAL'} )
 				return False
-
-	def registerNameNode(self):
-		self.name_nodes.append(self._name)
-		message ( "registerNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-
-	def unregisterNameNode(self):
-		self.name_nodes.remove(self._name)
-		self._namenode = None
-		self.config_ref['HOSTS'][self._host][self._name]['name_node'] = None
-		message ( "unregisterNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 	
-	def registerJournalNode(self):
-		self.journal_nodes.append(self._name)
-		message ( "registerJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-	
-	def unregisterJournalNode(self):
-		self.journal_nodes.remove(self._name)
-		self._journalnode = None
-		self.config_ref['HOSTS'][self._host][self._name]['journal_node'] = None
-		message ( "unregisterJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		
-	def registerDataNode(self):
-		self.data_nodes.append(self._name)
-		message ( "registerDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+	def authPubKeys(self):
+		output = ''
+		output += self._ssh_session.executeCli('ssh client global host-key-check no')
+		for creds in self.pub_keys:
+			user,pubkey = creds.split(":")
+			if user == "root":
+				continue
+			output += self._ssh_session.executeCli('ssh client user %s authorized-key sshv2 \"%s\"'%(user,pubkey))
+		return output
 
-	def unregisterDataNode(self):
-		self.data_nodes.remove(self._name)
-		message ( "unregisterDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		
-	def unregisterCluster(self):
-		self._clusterVIP = None
-		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
-		message ( "unregisterCluster %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-	
-	def is_clusternode(self):
-		if self._clusterVIP is not None:
-			return True
-		else:
-			return False
-
-	def is_namenode(self):
-		if self._namenode:
-			return self._namenode
-		else:
-			return False
-	
-	def getName():
-			return self._name
-
-	def getIP():
-			return self._ip
-
-	def getDiskimage():
-			return self._diskimageFull
-
-	def getMgmtNic():
-			return self._mgmtNic
-
-	def getStorNic():
-			return self._storNic
-
-	def randomMAC(self):
-		mac = [ 0x52, 0x54, 0x00,
-		random.randint(0x00, 0x7f),
-		random.randint(0x00, 0xff),
-		random.randint(0x00, 0xff) ]
-		return ':'.join(map(lambda x: "%02x".upper() % x, mac))
-
-	def hostid_generator(self):
-		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
+	def bring_storage(self):
+		output = ''
+		output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
+		output += self._ssh_session.executeCli('_exec service iscsid restart')
+		output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
+		output += self._ssh_session.executeCli('tps iscsi restart')
+		time.sleep(15)
+		output += self._ssh_session.executeCli('tps multipath renew ')
+		return output
 
 	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
 		message ( "cloned volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
-	
-	def delete_volume(self):
-		output =  self._host_ssh_session.executeCli("no virt volume file %s" % self._diskimage)
-		message ( "deleted volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		return output
 
-	def set_mfgdb(self):
+	def col_basic(self):
 		output = ''
-		var_offset = None
-		re_varoffset = re.compile( r"^\S+\.img8\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
-		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
-		
 		try:
-			match = re_varoffset.search(layout_template)
-			if match:
-				var_offset = match.group("varOffset")
-				message ( "varoffset in set_mfgdb is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
-			else:
-				message ( "Cannot find VarOffset in  set_mfgdb ",{'to_trace': '1' ,'style': 'TRACE'}  )
-				return False
+			output += self._ssh_session.executeCli('pm process collector launch enable')
+			output += self._ssh_session.executeCli('pm process collector launch relaunch auto')
+			output += self._ssh_session.executeCli('pm process collector launch auto')
+			output += self._ssh_session.executeCli('pm liveness grace-period 600')
+			output += self._ssh_session.executeCli('internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
+			output += " Success"
 		except Exception:
-			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
-			return False
-		
-		offset_bytes = int(var_offset) * 512
-		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
-		loop_dev = self._get_loop_device()
-		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
-		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
-		#TODO make a config.dir backp
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
-		
-		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/system/hostid 
-		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/net/interface/config/eth0/addr/ipv4/static/1/ip ipv4addr
-		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get -  /mfg/mfdb/net/interface/config/eth0/addr/ipv4/dhcp
-		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/net/routes/config/ipv4/prefix/0.0.0.0\\\/0/nh/1/gw
-		
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/static/1/ip ipv4addr %s" % (self._mgmtNic ,self._ip))
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/static/1/mask_len uint8 %s" % (self._mgmtNic ,self._mask))
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/dhcp bool false" % (self._mgmtNic))
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" \"/mfg/mfdb/net/routes/config/ipv4/prefix/0.0.0.0\\/0/nh/1/gw\" ipv4addr %s" % (self._gw))
-		
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1 uint32 1" )
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1/name string %s" % self._mgmtNic )
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1/macaddr macaddr802 %s" % self._mgmtMac)
-		
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2 uint32 2" )
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2/name string %s" % self._storNic )
-		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2/macaddr macaddr802 %s" % self._storMac )
-
-		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
-		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
-		
+			message ("Failed in config_collector" ,						{'style':'NOK'})
+			return "Failed"
 		return output
 
-	def disable_paging(remote_conn):
+	def collector_sanity(self):
+		from subprocess import Popen, PIPE
+		if self.is_clusternode() and not self.is_clustermaster():
+			return "Part of Cluster but not master. skipping node %s" % self._name
 		output = ''
-		output += self._host_ssh_session.executeCli("no cli default paging enable")
-		return output
-
-	def power_on(self):
-		output = ''
-		output += self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
-		return output
-
-	def power_off(self):
-		output = ''
-		output += self._host_ssh_session.executeCli('virt vm %s power off force' % self._name )
+		sanity_script = "collector_sanity.py"
+		test_suite_path = os.environ["INSTALL_PATH"]  + "/" + "hubrix/GuavusAutomationPlatform/test_suite"
+		clear_collector_logs()
+		message ("Starting collector sanity in %s" % self._name, 		{'style':'INFO'} )
+		output += Popen("python " + sanity_script + " -i " + self._ip , cwd=test_suite_path,shell=True, stdout=PIPE).communicate()[0]
+		message ("Collector Sanity is complete in %s" % self._name, 	{'style':'OK'} )
 		return output
 
 	def configure(self):
@@ -248,57 +156,11 @@ class vm_node(object):
 			message ("Failure configuring Err = %s in VM %s" % (output,self._name) ,{'style':'TRACE'})
 			return False
 		return output 
-	
-	def pingable(self,host):  
-		try:
-			if (os.name == "posix"):
-				cmd = "ping -c 1 %s"%host
-			else:
-				cmd = "ping %s"%host
-			if  commands.getstatusoutput(cmd)[0] == 0:
-				return True
-			return False
-		except Exception:
-			message ( "Canot Ping host %s" % host , {'style': 'FATAL'} )
-			return False
 
-	def ssh_self(self):
-		vm_up = False
-		if not self._ssh_session:           
-			timeOut = 600
-			while timeOut > 0:
-				if self.pingable(self._ip):
-					message ( "VM %s responds from %s "%(self._name,self._ip),
-							 {'style': 'DEBUG'}
-							 )
-					vm_up = True
-					break
-				else:
-					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds"%(self._name,self._ip),
-							 {'style': 'DEBUG'}
-							 )
-					time.sleep(5)
-					timeOut = timeOut - 5       
-			if vm_up :
-				#Find out admin user pass ( if not in config set default)
-				username = 'admin'
-				password = 'admin@123'
-				for cred in self._enabledusers:
-					user,passwd = cred.split(":")
-					if user.find('admin') != -1:
-						username	= user
-						password	= passwd
-				self._ssh_session = session(self._ip, username , password)
-				return self._ssh_session
-			else :
-				message ( "Exception that SSH connection can;t be made to the VM"  ,
-						 {'style': 'FATAL'}
-						 )
-				return False
-		elif  self._ssh_session :
-			return self._ssh_session
-		else:
-			return False
+	def config_write(self):
+		output = ''
+		output += self._ssh_session.executeCli('config write')
+		return output
 
 	def config_ntp(self):
 		output = ''
@@ -312,16 +174,44 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
 		return output
 
-	def set_user(self,user,password):
-		output = ''
-		output += self._ssh_session.executeCli('no user %s disable'%user)
-		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
-		return output
-
 	def configusers(self):
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
 			self.set_user(user,password)
+
+	def dottedQuadToNum(self,ip):
+		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
+		return long(hexn, 16)
+
+	def disable_clustering(self):
+		if not self.is_clusternode():
+			return False
+		return session.executeCli('no cluster enable')
+
+	def delete_volume(self):
+		output =  self._host_ssh_session.executeCli("no virt volume file %s" % self._diskimage)
+		message ( "deleted volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		return output
+
+	def disable_paging(remote_conn):
+		output = ''
+		output += self._host_ssh_session.executeCli("no cli default paging enable")
+		return output
+
+	def getName():
+			return self._name
+
+	def getIP():
+			return self._ip
+
+	def getDiskimage():
+			return self._diskimageFull
+
+	def getMgmtNic():
+			return self._mgmtNic
+
+	def getStorNic():
+			return self._storNic
 
 	def gen_dsakey(self):
 		output = ''
@@ -343,10 +233,249 @@ class vm_node(object):
 				message ( "Failure in gen_dsakey  %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return False
 		return output
+	
+	def get_psef(self):
+		output = ''
+		output += self._ssh_session.executeCli("cli session terminal width 999")
+		output += self._ssh_session.executeCli('_exec /bin/ps -ef')
+		return output
+
+	def hostid_generator(self):
+		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
+
+	def hdfs_report(self):
+		output = ''
+		checkScript = os.environ["ROBOT_PATH"] + "/" + "extras/yarn-config-check.sh"
+		#try :
+		self._ssh_session.transferFile(checkScript,"/tmp")
+		#except Exception:
+		#	message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s" % self._name ,{'style':'NOK'})
+		#	return False
+		try:
+			output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
+			return output
+		except Exception:
+			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
+
+	def has_storage(self):
+		return self._initiatorname_iscsi
+
+	def is_clusternode(self):
+		if self._clusterVIP is not None:
+			return True
+		else:
+			return False
+
+	def is_namenode(self):
+		if self._namenode:
+			return self._namenode
+		else:
+			return False
+
+	def is_clustermaster(self):
+		output = ''
+		output += self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/master')
+		if output.find("true") != -1:
+			return True
+		else:
+			return False
+
+	def image_fetch(self):
+		output = ''
+		output += self._ssh_session.executeCli('image fetch %s' % self._upgrade_img)
+		return output
+	
+	def image_install(self):
+		output		 = ''
+		image_name	 = self._upgrade_img.split("/")[-1]
+		output		+= self._ssh_session.executeCli('image install %s' % image_name )
+		#TODO check error
+		output		+= self._ssh_session.executeCli('image boot next')
+		return output
+
+	def install_license(self):
+		output = ''
+		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
+		return output
+
+	def is_ResManUp(self):
+		response = self.get_psef()
+		try:
+			m1 = re.search(ur'^(?P<javaProcess>.*?\/bin\/java\s+-Dproc_resourcemanager[\s+\S+]*?)$',response,re.MULTILINE)
+			if m1:
+				javaProcess = m1.group("javaProcess")
+				return javaProcess
+			else:
+				return False
+		except Exception:
+			message ( "Error matching javaProcess" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
+	def info_yarn_Setup(self):
+		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report')
+
+	def pingable(self,host):  
+		try:
+			if (os.name == "posix"):
+				cmd = "ping -c 1 %s"%host
+			else:
+				cmd = "ping %s"%host
+			if  commands.getstatusoutput(cmd)[0] == 0:
+				return True
+			return False
+		except Exception:
+			message ( "Canot Ping host %s" % host , {'style': 'FATAL'} )
+			return False
+
+	def ssh_self(self):
+		vm_up = False
+		if not self._ssh_session:           
+			timeOut = 600
+			while timeOut > 0:
+				if self.pingable(self._ip):
+					message ( "VM %s responds from %s " % (self._name,self._ip),				{'style': 'DEBUG'})
+					vm_up = True
+					break
+				else:
+					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds" % (self._name,self._ip),{'style': 'DEBUG'})
+					time.sleep(5)
+					timeOut = timeOut - 5       
+			if vm_up :
+				#Find out admin user pass ( if not in config set default)
+				username = 'admin'
+				password = 'admin@123'
+				for cred in self._enabledusers:
+					user,passwd = cred.split(":")
+					if user.find('admin') != -1:
+						username	= user
+						password	= passwd
+				self._ssh_session = session(self._ip, username , password)
+				return self._ssh_session
+			else :
+				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})
+				return False
+		elif  self._ssh_session :
+			return self._ssh_session
+		else:
+			return False
 
 	def factory_revert(self):
 		output = ''
 		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
+		return output
+
+	def format_storage(self):
+		output = ''
+		format_option = ""
+		global_format_forced = self.config_ref['HOSTS']['force_format']
+		if global_format_forced:
+			format_option += "no-strict"
+			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			
+		for fs_name in self._tps_fs.keys():
+			ini_format_option = self._tps_fs[fs_name]['format']
+			if ini_format_option is False:
+				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				continue
+			
+			count = 10
+			wwid = self._tps_fs[fs_name]['wwid'].lower()
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeCli('tps multipath show')
+				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
+				if wwid in current_multipaths:
+					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
+					output += full_output.splitlines()[-1]
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeCli('tps multipath show')
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
+							 {'style': 'INFO'} )
+					time.sleep(1)
+					continue
+		return output
+	
+	def mount_storage(self):
+		output = ''
+		for fs_name in self._tps_fs.keys():
+			wwid = self._tps_fs[fs_name]['wwid'].lower()
+			mount_point = self._tps_fs[fs_name]['mount-point']
+			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
+			output +=  self._ssh_session.executeCli('no tps fs %s ' %(fs_name))
+			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
+			output +=  self._ssh_session.executeCli('tps fs %s mount-point %s' %(fs_name,mount_point))
+			output +=  self._ssh_session.executeCli('tps fs %s enable' %(fs_name))
+		return output
+
+	def power_on(self):
+		output = ''
+		output += self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
+		return output
+
+	def power_off(self):
+		output = ''
+		output += self._host_ssh_session.executeCli('virt vm %s power off force' % self._name )
+		return output
+
+	def randomMAC(self):
+		mac = [ 0x52, 0x54, 0x00,
+		random.randint(0x00, 0x7f),
+		random.randint(0x00, 0xff),
+		random.randint(0x00, 0xff) ]
+		return ':'.join(map(lambda x: "%02x".upper() % x, mac))
+
+	def removeAuthKeys(self):
+		output = ''
+		for creds in self._enabledusers:
+			user,password = creds.split(":")
+			if user == "root":
+				continue
+			output += self._ssh_session.executeCli('_exec mdreq set delete - /ssh/server/username/%s/auth-key/sshv2/ '%user)
+		return output
+
+	def remove_storage(self):
+		output = ''
+		for fs_name in self._tps_fs.keys():
+			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
+		time.sleep(10)
+		for fs_name in self._tps_fs.keys():
+			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
+		return output
+
+	def reload(self):
+		output = ''
+		output += self._ssh_session.executeCli('config write')
+		output += self._ssh_session.executeCli('reload')
+		return output
+
+	def registerNameNode(self):
+		self.name_nodes.append(self._name)
+		message ( "registerNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
+	def registerDataNode(self):
+		self.data_nodes.append(self._name)
+		message ( "registerDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+	
+	def registerJournalNode(self):
+		self.journal_nodes.append(self._name)
+		message ( "registerJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
+	def rotate_logs(self):
+		output = ''
+		output += self._ssh_session.executeCli('logging files rotation force')
+		return output
+
+	def setSnmpServer(self):
+		output = ''
+		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		return output
+
+	def setHostName(self):
+		output = ''
+		output += self._ssh_session.executeCli('hostname %s' % self._name )
+		output += self._ssh_session.executeCli('config write')
 		return output
 
 	def set_snmpsink(self):
@@ -360,33 +489,17 @@ class vm_node(object):
 			output += self._ssh_session.executeCli('ip host %s %s '%(vm,self.nodes_ip[vm]))
 		return output
 	
-	def removeAuthKeys(self):
+	def setclustering(self):
 		output = ''
-		for creds in self._enabledusers:
-			user,password = creds.split(":")
-			if user == "root":
-				continue
-			output += self._ssh_session.executeCli('_exec mdreq set delete - /ssh/server/username/%s/auth-key/sshv2/ '%user)
-		return output
-	
-	def authPubKeys(self):
-		output = ''
-		output += self._ssh_session.executeCli('ssh client global host-key-check no')
-		for creds in self.pub_keys:
-			user,pubkey = creds.split(":")
-			if user == "root":
-				continue
-			output += self._ssh_session.executeCli('ssh client user %s authorized-key sshv2 \"%s\"'%(user,pubkey))
-		return output
-
-	def rotate_logs(self):
-		output = ''
-		output += self._ssh_session.executeCli('logging files rotation force')
-		return output
-	
-	def setSnmpServer(self):
-		output = ''
-		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		if not self.is_clusternode():
+			message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			return False # TODO Raise exception
+		if not self._cluster_name:
+			self._cluster_name = self._set_clusterName() 
+		output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
+		output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
+		output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
+		output += self._ssh_session.executeCli('cluster enable')
 		return output
 
 	def setStorNw(self):
@@ -440,35 +553,90 @@ class vm_node(object):
 		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 
-	def is_ResManUp(self):
-		response = self.get_psef()
-		try:
-			m1 = re.search(ur'^(?P<javaProcess>.*?\/bin\/java\s+-Dproc_resourcemanager[\s+\S+]*?)$',response,re.MULTILINE)
-			if m1:
-				javaProcess = m1.group("javaProcess")
-				return javaProcess
-			else:
-				return False
-		except Exception:
-			message ( "Error matching javaProcess" , {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
-
-	def collector_sanity(self):
-		from subprocess import Popen, PIPE
-		if self.is_clusternode() and not self.is_clustermaster():
-			return "Part of Cluster but not master. skipping node %s" % self._name
+	def set_clusterMaster(self):
 		output = ''
-		sanity_script = "collector_sanity.py"
-		test_suite_path = os.environ["INSTALL_PATH"]  + "/" + "hubrix/GuavusAutomationPlatform/test_suite"
-		clear_collector_logs()
-		message ("Starting collector sanity in %s" % self._name, 		{'style':'INFO'} )
-		output += Popen("python " + sanity_script + " -i " + self._ip , cwd=test_suite_path,shell=True, stdout=PIPE).communicate()[0]
-		message ("Collector Sanity is complete in %s" % self._name, 	{'style':'OK'} )
+		if not self.is_clusternode():
+			message ( "Improper calling of set_clusterMaster in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			return False # raise exception
+		output =  session.executeCli('cluster master self')
 		return output
 
-	def info_yarn_Setup(self):
-		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report') 
+	def set_user(self,user,password):
+		output = ''
+		output += self._ssh_session.executeCli('no user %s disable'%user)
+		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
+		return output
+
+	def set_mfgdb(self):
+		output = ''
+		var_offset = None
+		re_varoffset = re.compile( r"^\S+\.img8\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
+		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
 		
+		try:
+			match = re_varoffset.search(layout_template)
+			if match:
+				var_offset = match.group("varOffset")
+				message ( "varoffset in set_mfgdb is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
+			else:
+				message ( "Cannot find VarOffset in  set_mfgdb ",{'to_trace': '1' ,'style': 'TRACE'}  )
+				return False
+		except Exception:
+			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
+			return False
+		
+		offset_bytes = int(var_offset) * 512
+		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
+		loop_dev = self._get_loop_device()
+		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
+		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
+		#TODO make a config.dir backp
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
+		
+		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/system/hostid 
+		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/net/interface/config/eth0/addr/ipv4/static/1/ip ipv4addr
+		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get -  /mfg/mfdb/net/interface/config/eth0/addr/ipv4/dhcp
+		#/opt/tms/bin/mddbreq  -l /config/mfg/mfdb query  get - /mfg/mfdb/net/routes/config/ipv4/prefix/0.0.0.0\\\/0/nh/1/gw
+		
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/static/1/ip ipv4addr %s" % (self._mgmtNic ,self._ip))
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/static/1/mask_len uint8 %s" % (self._mgmtNic ,self._mask))
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/net/interface/config/%s/addr/ipv4/dhcp bool false" % (self._mgmtNic))
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" \"/mfg/mfdb/net/routes/config/ipv4/prefix/0.0.0.0\\/0/nh/1/gw\" ipv4addr %s" % (self._gw))
+		
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1 uint32 1" )
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1/name string %s" % self._mgmtNic )
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/1/macaddr macaddr802 %s" % self._mgmtMac)
+		
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2 uint32 2" )
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2/name string %s" % self._storNic )
+		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/interface/map/macifname/2/macaddr macaddr802 %s" % self._storMac )
+
+		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
+		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
+		
+		return output
+
+	def unregisterNameNode(self):
+		self.name_nodes.remove(self._name)
+		self._namenode = None
+		self.config_ref['HOSTS'][self._host][self._name]['name_node'] = None
+		message ( "unregisterNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+	
+	def unregisterJournalNode(self):
+		self.journal_nodes.remove(self._name)
+		self._journalnode = None
+		self.config_ref['HOSTS'][self._host][self._name]['journal_node'] = None
+		message ( "unregisterJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
+	def unregisterDataNode(self):
+		self.data_nodes.remove(self._name)
+		message ( "unregisterDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		
+	def unregisterCluster(self):
+		self._clusterVIP = None
+		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
+		message ( "unregisterCluster %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
 	def validate_HDFS(self):
 		if self.is_clusternode() and not self.is_clustermaster():
 			return "Part of Cluster but not master. skipping node %s" % self._name
@@ -499,183 +667,6 @@ class vm_node(object):
 			message ("HDFS Report = %s" % report ,{'style':'OK'} )
 		output += report 
 		return output
-
-	def hdfs_report(self):
-		output = ''
-		checkScript = os.environ["ROBOT_PATH"] + "/" + "extras/yarn-config-check.sh"
-		#try :
-		self._ssh_session.transferFile(checkScript,"/tmp")
-		#except Exception:
-		#	message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s" % self._name ,{'style':'NOK'})
-		#	return False
-		try:
-			output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
-			return output
-		except Exception:
-			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
-
-	def col_basic(self):
-		output = ''
-		try:
-			output += self._ssh_session.executeCli('pm process collector launch enable')
-			output += self._ssh_session.executeCli('pm process collector launch relaunch auto')
-			output += self._ssh_session.executeCli('pm process collector launch auto')
-			output += self._ssh_session.executeCli('pm liveness grace-period 600')
-			output += self._ssh_session.executeCli('internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
-			output += " Success"
-		except Exception:
-			message ("Failed in config_collector" ,{'style':'NOK'})
-			return "Failed"
-		return output
-
-	def has_storage(self):
-		return self._initiatorname_iscsi
-	
-	def bring_storage(self):
-		output = ''
-		output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
-		output += self._ssh_session.executeCli('_exec service iscsid restart')
-		output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
-		output += self._ssh_session.executeCli('tps iscsi restart')
-		time.sleep(15)
-		output += self._ssh_session.executeCli('tps multipath renew ')
-		return output
-	
-	def get_psef(self):
-		output = ''
-		output += self._ssh_session.executeCli("cli session terminal width 999")
-		output += self._ssh_session.executeCli('_exec /bin/ps -ef')
-		return output
-
-
-	def remove_storage(self):
-		output = ''
-		for fs_name in self._tps_fs.keys():
-			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
-		time.sleep(10)
-		for fs_name in self._tps_fs.keys():
-			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
-		return output
-
-	def format_storage(self):
-		output = ''
-		format_option = ""
-		global_format_forced = self.config_ref['HOSTS']['force_format']
-		if global_format_forced:
-			format_option += "no-strict"
-			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-			
-		for fs_name in self._tps_fs.keys():
-			ini_format_option = self._tps_fs[fs_name]['format']
-			if ini_format_option is False:
-				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
-				continue
-			
-			count = 10
-			wwid = self._tps_fs[fs_name]['wwid'].lower()
-			while count > 0 :
-				current_multipaths = self._ssh_session.executeCli('tps multipath show')
-				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
-				#output += current_multipaths 
-				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
-					output += full_output.splitlines()[-1]
-					break
-				elif wwid not in current_multipaths:
-					count = count - 1
-					output += self._ssh_session.executeCli('tps multipath show')
-					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
-							 {'style': 'INFO'} )
-					time.sleep(1)
-					continue
-		return output
-	
-	def mount_storage(self):
-		output = ''
-		for fs_name in self._tps_fs.keys():
-			wwid = self._tps_fs[fs_name]['wwid'].lower()
-			mount_point = self._tps_fs[fs_name]['mount-point']
-			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
-			output +=  self._ssh_session.executeCli('no tps fs %s ' %(fs_name))
-			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
-			output +=  self._ssh_session.executeCli('tps fs %s mount-point %s' %(fs_name,mount_point))
-			output +=  self._ssh_session.executeCli('tps fs %s enable' %(fs_name))
-		return output
-
-	def config_write(self):
-		output = ''
-		output += self._ssh_session.executeCli('config write')
-		return output
-	
-	def dottedQuadToNum(self,ip):
-		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
-		return long(hexn, 16)
-	
-	def setHostName(self):
-		output = ''
-		output += self._ssh_session.executeCli('hostname %s' % self._name )
-		output += self._ssh_session.executeCli('config write')
-		return output
-	
-	def setclustering(self):
-		output = ''
-		if not self.is_clusternode():
-			message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-			return False # TODO Raise exception
-		if not self._cluster_name:
-			self._cluster_name = self._set_clusterName() 
-		output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
-		output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
-		output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
-		output += self._ssh_session.executeCli('cluster enable')
-		return output
-		
-	def disable_clustering(self):
-		if not self.is_clusternode():
-			return False
-		return session.executeCli('no cluster enable')
-	
-	def is_clustermaster(self):
-		output = ''
-		output += self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/master')
-		if output.find("true") != -1:
-			return True
-		else:
-			return False
-
-	def set_clusterMaster(self):
-		output = ''
-		if not self.is_clusternode():
-			message ( "Improper calling of set_clusterMaster in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-			return False # raise exception
-		output =  session.executeCli('cluster master self')
-		return output 
-
-	def image_fetch(self):
-		output = ''
-		output += self._ssh_session.executeCli('image fetch %s' % self._upgrade_img)
-		return output
-	
-	def image_install(self):
-		output		 = ''
-		image_name	 = self._upgrade_img.split("/")[-1]
-		output		+= self._ssh_session.executeCli('image install %s' % image_name )
-		#TODO check error
-		output		+= self._ssh_session.executeCli('image boot next')
-		return output
-
-	def reload(self):
-		output = ''
-		output += self._ssh_session.executeCli('config write')
-		output += self._ssh_session.executeCli('reload')
-		return output
-
-	def install_license(self):
-		output = ''
-		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
-		return output
-	
-
 
 if __name__ == '__main__':
     pass

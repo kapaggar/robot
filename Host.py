@@ -33,82 +33,11 @@ class Host(object):
 			message ( "Host del object  %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			self._ssh_session.close()
 
-	def getname(self):
-		return self._name
-
-	def getip(self):
-		return self._ip
-
 	def connectSSH(self):
 		self._ssh_session = session(self._ip, self._username, self._password)
 		self.config['HOSTS'][self._name]['ssh_session'] = self._ssh_session
 		return self._ssh_session
 	
-	def enableVirt(self):
-		output = ''
-		output += self._ssh_session.executeCli('virt enable',wait=5)
-		return output
-	
-	def wipe_setup(self):
-		output = ''
-		cmd  = "pkill  /usr/libexec/qemu-kvm \n"
-		cmd += "rm -rf /data/virt/pools/default/*.iso \n"
-		cmd += "rm -rf /data/virt/pools/default/*.img \n"
-		output +=  self._ssh_session.executeShell(cmd)
-		if output.find("cannot") != -1:
-			return output + "Fail"
-		else:
-			return output + "Success"
-	
-	def delete_template(self):
-		output = ''
-		response = self._ssh_session.executeCli('virt vm template install cancel')
-		output += response
-		if response.find("No installation in progress on VM") != -1 :
-			message ("Similar installation was already Running on host %s."% self.getname(), {'style':'WARNING'})
-			output += self._ssh_session.executeCli('no virt vm template ')
-			message ("Older installation stopped on host %s."% self.getname(), {'style':'OK'})
-			output = str(output) + " Success"
-		else :
-			message ("No Template installation in progess", {'style':'OK'})
-			output = str(output) + " Success"
-		return output
-	
-	def get_common(self):
-		commons = {}	
-		for section in config['HOSTS'][self._name]:
-			if not isinstance(config['HOSTS'][self._name][section], dict):
-				commons[section] = config['HOSTS'][self._name][section]
-		return commons
-	
-	def get_vms(self):
-		vms = []
-		host = self._name
-		for section in self.config['HOSTS'][host]:
-			if isinstance(self.config['HOSTS'][host][section], dict):
-				vms.append(section)
-		return vms
-	
-	def synctime(self):
-		output = ''
-		output += self._ssh_session.executeCli('ntpdate  %s' %self._ntp_server )
-		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
-		output += self._ssh_session.executeCli('ntp enable ')
-		if output.find("adjust") != -1 :
-			output += " Success"
-		else:
-			output += " Fail"
-		return output
-
-	def setDNS(self):
-		output = ''
-		try:
-			output += self._ssh_session.executeCli('ip name-server %s '%self._name_server)
-			output = output + " Success"
-		except Exception:
-			message ( "Cannot set dns server on %s " % self._host,{ 'style': 'WARNING'}  )
-		return output
-
 	def create_template(self):
 		output = ''
 		template_name = basename(self._template_file)
@@ -131,14 +60,48 @@ class Host(object):
 			output = output + " Failed "
 		return output
 
-	def is_template_present(self):
+	def deleteVMs(self):
 		output = ''
-		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._template_file)
-		if output.find("No such file or directory") != -1:
-			return False
+		try:
+			for vm_name in self._vms:
+				output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
+			output = str ( output ) + " Success"
+		except Exception:
+			message ( "Cannot delete vms  %s " % output,{'to_trace': '1' ,'style': 'FATAL'}  )
+			output = output + " Failed"
+		return output
+	
+	def declareVMs(self):
+		for vm_name in self._vms:
+			vm = vm_node(self.config,self._name,vm_name)
+			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
+		return "Success"
+
+	def delete_template(self):
+		output = ''
+		response = self._ssh_session.executeCli('virt vm template install cancel')
+		output += response
+		if response.find("No installation in progress on VM") != -1 :
+			message ("Similar installation was already Running on host %s."% self.getname(), {'style':'WARNING'})
+			output += self._ssh_session.executeCli('no virt vm template ')
+			message ("Older installation stopped on host %s."% self.getname(), {'style':'OK'})
+			output = str(output) + " Success"
 		else :
-			return True
-		
+			message ("No Template installation in progess", {'style':'OK'})
+			output = str(output) + " Success"
+		return output
+
+	def enableVirt(self):
+		output = ''
+		output += self._ssh_session.executeCli('virt enable',wait=5)
+		return output
+
+	def getname(self):
+		return self._name
+
+	def getip(self):
+		return self._ip
+	
 	def get_iso_path(self):
 		if self._iso_path == "nightly" :
 			nightly_base_dir = self.config['HOSTS']['nightly_dir']
@@ -178,24 +141,31 @@ class Host(object):
 			if isinstance(self.config['HOSTS'][self._name][section], dict):
 				vms.append(section)
 		return vms
+
 	
-	def deleteVMs(self):
+	def get_common(self):
+		commons = {}	
+		for section in config['HOSTS'][self._name]:
+			if not isinstance(config['HOSTS'][self._name][section], dict):
+				commons[section] = config['HOSTS'][self._name][section]
+		return commons
+	
+	def get_vms(self):
+		vms = []
+		host = self._name
+		for section in self.config['HOSTS'][host]:
+			if isinstance(self.config['HOSTS'][host][section], dict):
+				vms.append(section)
+		return vms
+
+	def is_template_present(self):
 		output = ''
-		try:
-			for vm_name in self._vms:
-				output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
-			output = str ( output ) + " Success"
-		except Exception:
-			message ( "Cannot delete vms  %s " % output,{'to_trace': '1' ,'style': 'FATAL'}  )
-			output = output + " Failed"
-		return output
-	
-	def declareVMs(self):
-		for vm_name in self._vms:
-			vm = vm_node(self.config,self._name,vm_name)
-			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
-		return "Success"
-	
+		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._template_file)
+		if output.find("No such file or directory") != -1:
+			return False
+		else :
+			return True
+
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
@@ -203,6 +173,25 @@ class Host(object):
 			message ( "VM-Configure_Output = [%s]" % vm.configure()		, {'style': 'INFO'} )
 			message ( "VM-SetMfgDB_Output = [%s]" % vm.set_mfgdb()		, {'style': 'INFO'} )
 
+	def synctime(self):
+		output = ''
+		output += self._ssh_session.executeCli('ntpdate  %s' %self._ntp_server )
+		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
+		output += self._ssh_session.executeCli('ntp enable ')
+		if output.find("adjust") != -1 :
+			output += " Success"
+		else:
+			output += " Fail"
+		return output
+
+	def setDNS(self):
+		output = ''
+		try:
+			output += self._ssh_session.executeCli('ip name-server %s '%self._name_server)
+			output = output + " Success"
+		except Exception:
+			message ( "Cannot set dns server on %s " % self._host,{ 'style': 'WARNING'}  )
+		return output
 	
 	def startVMs(self):
 		for vm_name in self._vms:
@@ -216,6 +205,17 @@ class Host(object):
 				message ( "VM-Fetch		= [%s]" % vm.image_fetch()		, {'style': 'INFO'} )
 				message ( "VM-Install	= [%s]" % vm.image_install()	, {'style': 'INFO'} )
 				message ( "VM-Reload	= [%s]" % vm.reload()			, {'style': 'INFO'} )
+	
+	def wipe_setup(self):
+		output = ''
+		cmd  = "pkill  /usr/libexec/qemu-kvm \n"
+		cmd += "rm -rf /data/virt/pools/default/*.iso \n"
+		cmd += "rm -rf /data/virt/pools/default/*.img \n"
+		output +=  self._ssh_session.executeShell(cmd)
+		if output.find("cannot") != -1:
+			return output + "Fail"
+		else:
+			return output + "Success"
 
 if __name__ == '__main__':
     pass

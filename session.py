@@ -43,9 +43,40 @@ class session(object):
 		if self.session != None:
 			message ( "session del for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 			self.session.close()
-	def username(self):
-		return self._username
-	
+
+	def _cmd_fix_input_data(self, input_data):
+		if input_data is not None:
+			if len(input_data) > 0:
+				if '\\n' in input_data:
+					lines = input_data.split('\\n')
+					input_data = '\n'.join(lines)
+			return input_data.split('\n')
+		return []
+
+	def _clean_output_data(self, output):
+		output = output.strip()
+		output = self.re_newlines.sub(' ', output)
+		output = output.split(' ')
+		 
+		out = [x.strip() for x in output if x not in ['', '\r', '\r\n', '\n\r', '\n']]
+		ret = list()
+		 
+		for line in out:
+			new_line = filter(lambda x: x in string.printable, line)
+			new_line = self.re_color_codes.sub('', new_line)
+			ret.append(new_line)
+		return ret
+
+	def checkFileExist(self,filenameFullPath):
+		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
+		output= self.executeShell(command).split("\n")[-1]
+		if output == "File exists":
+			trace.info("File '%s' exists"%filenameFullPath)
+			return True
+		else:
+			trace.trace("File '%s' doesn't exists"%filenameFullPath)
+		return False
+
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
 		retry = 5
@@ -85,113 +116,6 @@ class session(object):
 		message ( "Transport closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		self.session.close()
 		message ( "Session closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
-	
-	def getLoginPrompt(self,line):
-		try:
-			m1 = re.search("^(?P<loginPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",line.strip(),re.MULTILINE)
-			if m1:
-				loginPrompt = m1.group("loginPrompt")
-				return loginPrompt
-			else:
-				return False
-		except Exception:
-			message ( "Error matching getLoginPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
-			
-	def getenPrompt(self,line):
-		try:
-			m1 = re.search("^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+#)\s*",line.strip(),re.MULTILINE)
-			if m1:
-				enPrompt = m1.group("enPrompt")
-				return enPrompt
-			else:
-				return False
-		except Exception:
-			message ( "Error matching getenPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
-
-	def getcliPrompt(self,line):
-		try:
-			m1 = re.search("^(?P<cliPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+\(config\)\s+#)\s*",line.strip(),re.MULTILINE)
-			if m1:
-				cliPrompt = m1.group("cliPrompt")
-				return cliPrompt
-			else:
-				return False
-		except Exception:
-			message ( "Error matching getcliPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
-		
-	def getshellPrompt(self,line):
-		try:
-			m1 = re.search("^(?P<shellPrompt>\[\S+@\S+\s+\S+\]\s*#)\s*",line.strip(),re.MULTILINE)
-			if m1:
-				shellPrompt = m1.group("shellPrompt")
-				return shellPrompt
-			else:
-				return False
-		except Exception:
-			message ( "Error matching getshellPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
-
-	def tellPrompt(self,line):
-		try:
-			if self.getshellPrompt(line):
-				message ( "In shell prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return "shell"
-			elif self.getcliPrompt(line):
-				message ( "In cli prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return "cli"
-			elif self.getenPrompt(line):
-				message ( "In en prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return "en"
-			elif self.getLoginPrompt(line):
-				message ( "In login prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return "login"
-			elif line.find("pm extension>") != -1:
-				message ( "In pmx prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return "pmx"
-			else:
-				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return False
-		except Exception:
-			errorMsg = "Error: %s" % traceback.format_exc()
-			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
-			return None
-
-	def checkFileExist(self,filenameFullPath):
-		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
-		output= self.executeShell(command).split("\n")[-1]
-		if output == "File exists":
-			trace.info("File '%s' exists"%filenameFullPath)
-			return True
-		else:
-			trace.trace("File '%s' doesn't exists"%filenameFullPath)
-		return False 
-
-	def getPrompt(self):
-		got_prompt = False
-		timeOut = 60
-		while timeOut > 0:
-			self.write("")
-			buff = self.read()
-			lines = buff.splitlines()
-			if len(lines) > 0:
-				buff = lines[-1]
-				if buff and not buff.isspace():   # the string is non-empty
-					got_prompt = True
-					break
-				else :
-					timeOut = timeOut - 1
-			else :
-				timeOut = timeOut - 1
-		try:
-			if got_prompt:
-				prompt = self.tellPrompt(buff) 
-				return prompt   
-		except Exception:
-			message ( "Unable to reach a Prompt in getPrompt", {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
 
 	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1):
 		output = ''
@@ -219,52 +143,7 @@ class session(object):
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
 			return output
 		#Todo Raise exception"
-		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),
-				 {'to_log':1 , 'style': 'FATAL'}
-				 ) 
-
-
-	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
-		cmds = self._cmd_fix_input_data(cmd)
-		for lines in cmds:
-			 self.write(lines)
-			 time.sleep(0.5)
-		message ( "sending=>\"%s\" on %s" %( cmd,self._host),
-				 {'to_trace':1, 'to_log':1 , 'style': 'TRACE'}
-				 ) 
-		data = ''
-		output = ''
-		lastline = ''
-		while True :
-			data =  self.chan.recv(4096)
-			data = data.replace('\r', '')
-			if not output:
-					 data = data.replace('.*\n'  ,'')
-					 data = data.replace(cmd  ,'')
-					 output += data
-			else:
-					 output += data
-			#debug
-			lines =  data.splitlines()
-			if len(lines) > 0 :
-				lastline = lines[-1]
-				#message ( "debug long running cmd progress at =>\"%s\" on %s" % (lastline,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
-			else:
-				message ( "Client Disconnected.. reboot ?",
-						 {'to_stdout':1, 'to_log':1 , 'style': 'NOK'}
-						 ) 
-				return False #May be shell exited abruptly 
-			if isinstance(prompt,re._pattern_type):
-				if prompt.match(lastline):
-					output = re.sub(prompt,'',output)
-					break
-			else:
-				if prompt in lastline:
-					break
-					if not self.chan.recv_ready():	   
-						time.sleep(wait)
-		output.lstrip()
-		return output
+		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'}) 
 
 	def executePmx(self,cmd):
 		output = ''
@@ -313,6 +192,170 @@ class session(object):
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
 
+	def getLoginPrompt(self,line):
+		try:
+			m1 = re.search("^(?P<loginPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",line.strip(),re.MULTILINE)
+			if m1:
+				loginPrompt = m1.group("loginPrompt")
+				return loginPrompt
+			else:
+				return False
+		except Exception:
+			message ( "Error matching getLoginPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+			
+	def getenPrompt(self,line):
+		try:
+			m1 = re.search("^(?P<enPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+#)\s*",line.strip(),re.MULTILINE)
+			if m1:
+				enPrompt = m1.group("enPrompt")
+				return enPrompt
+			else:
+				return False
+		except Exception:
+			message ( "Error matching getenPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
+	def getcliPrompt(self,line):
+		try:
+			m1 = re.search("^(?P<cliPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+\(config\)\s+#)\s*",line.strip(),re.MULTILINE)
+			if m1:
+				cliPrompt = m1.group("cliPrompt")
+				return cliPrompt
+			else:
+				return False
+		except Exception:
+			message ( "Error matching getcliPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+		
+	def getshellPrompt(self,line):
+		try:
+			m1 = re.search("^(?P<shellPrompt>\[\S+@\S+\s+\S+\]\s*#)\s*",line.strip(),re.MULTILINE)
+			if m1:
+				shellPrompt = m1.group("shellPrompt")
+				return shellPrompt
+			else:
+				return False
+		except Exception:
+			message ( "Error matching getshellPrompt" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
+	def getPrompt(self):
+		got_prompt = False
+		timeOut = 60
+		while timeOut > 0:
+			self.write("")
+			buff = self.read()
+			lines = buff.splitlines()
+			if len(lines) > 0:
+				buff = lines[-1]
+				if buff and not buff.isspace():   # the string is non-empty
+					got_prompt = True
+					break
+				else :
+					timeOut = timeOut - 1
+			else :
+				timeOut = timeOut - 1
+		try:
+			if got_prompt:
+				prompt = self.tellPrompt(buff) 
+				return prompt   
+		except Exception:
+			message ( "Unable to reach a Prompt in getPrompt", {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
+	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
+		cmds = self._cmd_fix_input_data(cmd)
+		for lines in cmds:
+			 self.write(lines)
+			 time.sleep(0.5)
+		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
+		
+		data = ''
+		output = ''
+		lastline = ''
+		while True :
+			data =  self.chan.recv(4096)
+			data = data.replace('\r', '')
+			if not output:
+					 data = data.replace('.*\n'  ,'')
+					 data = data.replace(cmd  ,'')
+					 output += data
+			else:
+					 output += data
+			#debug
+			lines =  data.splitlines()
+			if len(lines) > 0 :
+				lastline = lines[-1]
+				#message ( "debug long running cmd progress at =>\"%s\" on %s" % (lastline,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+			else:
+				message ( "Client Disconnected.. reboot ?",{'to_stdout':1, 'to_log':1 , 'style': 'NOK'}) 
+				return False #May be shell exited abruptly 
+			if isinstance(prompt,re._pattern_type):
+				if prompt.match(lastline):
+					output = re.sub(prompt,'',output)
+					break
+			else:
+				if prompt in lastline:
+					break
+					if not self.chan.recv_ready():	   
+						time.sleep(wait)
+		output.lstrip()
+		return output
+
+
+
+	def read(self):
+		data = ""
+		got_data = False
+		timeOut = 120
+		while timeOut > 0 :
+			if self.chan.recv_ready():
+				data = unicode(self.chan.recv(4096), errors='replace')
+				got_data = True
+				break
+			else:
+				time.sleep(0.5)
+				timeOut = timeOut - 1
+		try:
+			if got_data:
+				return data
+		except Exception:
+			message ( "Unable to read from channel" ,{'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}) 
+			return False
+
+	def read_all(self):
+		data = ""
+		while self.chan.recv_ready():
+			data += unicode(self.chan.recv(4096), errors='replace')
+		return data
+
+	def tellPrompt(self,line):
+		try:
+			if self.getshellPrompt(line):
+				message ( "In shell prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return "shell"
+			elif self.getcliPrompt(line):
+				message ( "In cli prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return "cli"
+			elif self.getenPrompt(line):
+				message ( "In en prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return "en"
+			elif self.getLoginPrompt(line):
+				message ( "In login prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return "login"
+			elif line.find("pm extension>") != -1:
+				message ( "In pmx prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return "pmx"
+			else:
+				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return False
+		except Exception:
+			errorMsg = "Error: %s" % traceback.format_exc()
+			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
+			terminate_self("Something bad happened with guessing current prompt. Exiting. see traces.")
+			return None
+
 	def transferFile(self,local_file,dir_remote,perm=0755):
 		"""
 		self._ssh_session.transferFile(local_file,dir_remote)
@@ -352,6 +395,9 @@ class session(object):
 			#except :
 			#	message ( "Cannot copy file %s from % to %s" % (fname,dir_local,dir_remote),  {'style': 'nok'}  )
 
+	def username(self):
+		return self._username
+
 	def write(self, cmd):
 		timeOut = 60
 		sent_data = False
@@ -374,56 +420,6 @@ class session(object):
 			return False
 
 
-	def read(self):
-		data = ""
-		got_data = False
-		timeOut = 120
-		while timeOut > 0 :
-			if self.chan.recv_ready():
-				data = unicode(self.chan.recv(4096), errors='replace')
-				got_data = True
-				break
-			else:
-				time.sleep(0.5)
-				timeOut = timeOut - 1
-		try:
-			if got_data:
-				return data
-		except Exception:
-			message ( "Unable to read from channel" ,
-					 {'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}
-					 ) 
-			return False
-
-	def read_all(self):
-		data = ""
-		while self.chan.recv_ready():
-			data += unicode(self.chan.recv(4096), errors='replace')
-		return data
-		
-	def _cmd_fix_input_data(self, input_data):
-		if input_data is not None:
-			if len(input_data) > 0:
-				if '\\n' in input_data:
-					lines = input_data.split('\\n')
-					input_data = '\n'.join(lines)
-			return input_data.split('\n')
-		return []
-
-
-	def _clean_output_data(self, output):
-		output = output.strip()
-		output = self.re_newlines.sub(' ', output)
-		output = output.split(' ')
-		 
-		out = [x.strip() for x in output if x not in ['', '\r', '\r\n', '\n\r', '\n']]
-		ret = list()
-		 
-		for line in out:
-			new_line = filter(lambda x: x in string.printable, line)
-			new_line = self.re_color_codes.sub('', new_line)
-			ret.append(new_line)
-		return ret   
 
 
 if __name__ == '__main__':

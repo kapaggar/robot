@@ -15,28 +15,113 @@ from pprint import pprint
 
 hosts = list()
 
+def basic_settings(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
+			if opt_reconfig:
+				message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
+			message ( "License-Install_Output = %s " %vm.install_license()	, {'style': 'INFO'} )
+			message ( "SnmpConfig_Output = %s " %vm.setSnmpServer()			, {'style': 'INFO'} )
+			message ( "DNS-Config_Output = %s " %vm.config_dns()			, {'style': 'INFO'} )
+			message ( "NTP-Config_Output = %s " %vm.config_ntp()			, {'style': 'INFO'} )
+			message ( "User-Config_Output = %s " %vm.configusers()			, {'style': 'INFO'} )
+			message ( "Hostname-Config_Output = %s " %vm.setHostName()		, {'style': 'INFO'} )
+			message ( "HostMaps_Output = %s " %vm.setIpHostMaps()			, {'style': 'INFO'} )
+			message ( "Storage-nw_Output = %s " %vm.setStorNw()				, {'style': 'INFO'} )
+			message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
+		else :
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def clear_ha(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		"""
+		The logic for below could be wrong.. Double Check
+		"""
+		if vm.is_namenode() == 2 :   
+			vm.unregisterNameNode()
+			vm.registerDataNode()
+		if vm.is_clusternode():
+			vm.unregisterCluster()
+	return "Success"
+
+def checkHDFS(tuples):
+	output = ''
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				response = vm.validate_HDFS()
+				message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+				output += response
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
+
+def checkColSanity(tuples):
+	output = ''
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking collector sanity inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				response = vm.collector_sanity()
+				message ("CollectorSanity_Output = [%s]" % response,{'style': 'INFO'} )
+				output += response
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
+
+def config_collector(tuples):		
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now configuring collector basics inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+
 def connect_hosts (hosts):
 	for host_name in hosts:
 		host = Host(config,host_name)
 		config['HOSTS'][host_name]['host_ref'] = host
 		host.connectSSH()
 	return "Success"
-		
-def get_hosts(config):
-	hosts = []	
-	for section in config['HOSTS']:
-		if isinstance(config['HOSTS'][section], dict):
-			hosts.append(config['HOSTS'][section].name)
-	return hosts
+	
+def do_manufacture(hosts):
+	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
+	threads = []
+	for host_name in hosts:
+			host = config['HOSTS'][host_name]['host_ref']
+			newThread = threading.Thread(target=manufVMs, args = (host,))
+			newThread.setDaemon(True)
+			newThread.start()
+			threads.append(newThread)
+	for thread in threads:
+			thread.join()
+	return "Success"
 
-def get_allvms(config):
-	tuples = []	
-	for host_section in config['HOSTS']:
-		if isinstance(config['HOSTS'][host_section], dict):
-			for vm_section in config['HOSTS'][host_section]:
-				if isinstance(config['HOSTS'][host_section][vm_section], dict):
-					tuples.append(host_section + ":" + vm_section)
-	return tuples
+def do_upgrade():
+	message ( 'Upgrade Option set', {'style': 'INFO'} ) 
+	threads = []
+	for host_name in hosts:
+		host = config['HOSTS'][host_name]['host_ref']
+		newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
+	for thread in threads:
+		thread.join()
+	return "Success"
 
 def exit_cleanup(signal, frame):
 	message ( 'Caught signal %s.. Cleaning Up'% signal, {'style': 'INFO'} ) 
@@ -62,67 +147,6 @@ def exit_cleanup(signal, frame):
 	sys.exit("Cleaned")
 	os._exit()
 
-def wipe_vmpool(hosts):
-	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} )
-	for host_name in hosts:
-		host = config['HOSTS'][host_name]['host_ref']
-		message ( "WipeSetup_Output = %s " %host.wipe_setup()             , {'style': 'INFO'} )
-		return "Success"
-
-def do_manufacture(hosts):
-	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
-	threads = []
-	for host_name in hosts:
-			host = config['HOSTS'][host_name]['host_ref']
-			newThread = threading.Thread(target=manufVMs, args = (host,))
-			newThread.setDaemon(True)
-			newThread.start()
-			threads.append(newThread)
-	for thread in threads:
-			thread.join()
-	return "Success"
-
-def do_upgrade():
-	message ( 'Upgrade Option set', {'style': 'INFO'} ) 
-	threads = []
-	for host_name in hosts:
-		host = config['HOSTS'][host_name]['host_ref']
-		newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
-	for thread in threads:
-		thread.join()
-	return "Success"
-
-def objectify_vms(tuples):
-	for line in tuples:
-		host,vm_name = line.split(":")
-		if not config['HOSTS'][host][vm_name]['vm_ref']:
-			vm = vm_node(config,host,vm_name)
-			config['HOSTS'][host][vm_name]['vm_ref'] = vm
-	return "Success"
-
-def basic_settings(tuples):
-	for line in tuples:
-		host,vm_name = line.split(":")
-		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.ssh_self():
-			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
-			if opt_reconfig:
-				message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
-			message ( "License-Install_Output = %s " %vm.install_license()	, {'style': 'INFO'} )
-			message ( "SnmpConfig_Output = %s " %vm.setSnmpServer()			, {'style': 'INFO'} )
-			message ( "DNS-Config_Output = %s " %vm.config_dns()			, {'style': 'INFO'} )
-			message ( "NTP-Config_Output = %s " %vm.config_ntp()			, {'style': 'INFO'} )
-			message ( "User-Config_Output = %s " %vm.configusers()			, {'style': 'INFO'} )
-			message ( "Hostname-Config_Output = %s " %vm.setHostName()		, {'style': 'INFO'} )
-			message ( "HostMaps_Output = %s " %vm.setIpHostMaps()			, {'style': 'INFO'} )
-			message ( "Storage-nw_Output = %s " %vm.setStorNw()				, {'style': 'INFO'} )
-			message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
-		else :
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-			terminate_self("Exiting")
-	return "Success"
-
 def generate_keys(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
@@ -132,6 +156,52 @@ def generate_keys(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
+	return "Success"
+
+def get_hosts(config):
+	hosts = []	
+	for section in config['HOSTS']:
+		if isinstance(config['HOSTS'][section], dict):
+			hosts.append(config['HOSTS'][section].name)
+	return hosts
+
+def get_allvms(config):
+	tuples = []	
+	for host_section in config['HOSTS']:
+		if isinstance(config['HOSTS'][host_section], dict):
+			for vm_section in config['HOSTS'][host_section]:
+				if isinstance(config['HOSTS'][host_section][vm_section], dict):
+					tuples.append(host_section + ":" + vm_section)
+	return tuples
+
+
+def manufVMs(host):
+	time.sleep(1)
+	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
+	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
+	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
+	if opt_lazy:
+		if host.is_template_present():
+			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
+		else :
+			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
+			terminate_self("Template missing in host %s" % host.getname())
+	else:
+		message (  "GetMfgISO_Output = [%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
+		message (  "Delete-Template_Output = [%s]"	% host.delete_template()	,{'style': 'INFO'} )
+		message (  "Create-Template_Output = [%s]"	% host.create_template()	,{'style': 'INFO'} )
+	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()		,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
+	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
+	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
+	return "Success"
+
+def objectify_vms(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		if not config['HOSTS'][host][vm_name]['vm_ref']:
+			vm = vm_node(config,host,vm_name)
+			config['HOSTS'][host][vm_name]['vm_ref'] = vm
 	return "Success"
 
 def shareKeys(tuples):
@@ -196,82 +266,6 @@ def setupHDFS(tuples):
 				terminate_self("Exiting")
 	return "Success"
 
-def checkHDFS(tuples):
-	output = ''
-	for line in tuples:
-		host,vm_name = line.split(":")
-		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.is_namenode():
-			if vm.ssh_self():
-				response = vm.validate_HDFS()
-				message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
-				output += response
-			else:
-				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-	return output
-
-def checkColSanity(tuples):
-	output = ''
-	for line in tuples:
-		host,vm_name = line.split(":")
-		message ( "Now checking collector sanity inside VM %s" % vm_name,{'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.is_namenode():
-			if vm.ssh_self():
-				response = vm.collector_sanity()
-				message ("CollectorSanity_Output = [%s]" % response,{'style': 'INFO'} )
-				output += response
-			else:
-				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-	return output
-
-def config_collector(tuples):		
-	for line in tuples:
-		host,vm_name = line.split(":")
-		message ( "Now configuring collector basics inside VM %s" % vm_name,{'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.is_namenode():
-			if vm.ssh_self():
-				message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
-			else:
-				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-
-def clear_ha(tuples):
-	for line in tuples:
-		host,vm_name = line.split(":")
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		"""
-		The logic for below could be wrong.. Double Check
-		"""
-		if vm.is_namenode() == 2 :   
-			vm.unregisterNameNode()
-			vm.registerDataNode()
-		if vm.is_clusternode():
-			vm.unregisterCluster()
-	return "Success"
-
-def manufVMs(host):
-	time.sleep(1)
-	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
-	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
-	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
-	if opt_lazy:
-		if host.is_template_present():
-			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
-		else :
-			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
-			terminate_self("Template missing in host %s" % host.getname())
-	else:
-		message (  "GetMfgISO_Output = [%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
-		message (  "Delete-Template_Output = [%s]"	% host.delete_template()	,{'style': 'INFO'} )
-		message (  "Create-Template_Output = [%s]"	% host.create_template()	,{'style': 'INFO'} )
-	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()		,{'style': 'INFO'} )
-	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
-	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
-	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
-	return "Success"
-
 def validate(config):
 	validator = Validator()
 	results = config.validate(validator)
@@ -283,6 +277,15 @@ def validate(config):
 				message ( 'The following section was missing:%s ' % ", ".join(section_list) , {'style':'DEBUG'} )
 		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
 		terminate_self("Exiting.")
+
+def wipe_vmpool(hosts):
+	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} )
+	for host_name in hosts:
+		host = config['HOSTS'][host_name]['host_ref']
+		message ( "WipeSetup_Output = %s " %host.wipe_setup()             , {'style': 'INFO'} )
+		return "Success"
+
+
 '''
 Steps:
 1. Take Config as Input
@@ -313,7 +316,7 @@ if __name__ == '__main__':
 						metavar='LOGFILE',
 						nargs=1,
 						type=str,
-						help='Custom logfile name. default is script.PID.log (DoesNOT redirects stdout)')
+						help='Custom logfile name. Default is script.TimeStamp.log ( Does NOT redirects stdout )')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',
