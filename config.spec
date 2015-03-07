@@ -39,7 +39,7 @@ vm_ref = string(default=None)
 [[[[storage]]]]
 initiatorname_iscsi = string(default = None)
 iscsi_target = ip_addr(default=None)
-forbidden_nodes = string_list(default=None)
+forbidden_nodes = string_list(default = list())
 
 [[[[multipath-alias]]]]
 pgsql = string(default=None)

@@ -42,6 +42,7 @@ class vm_node(object):
 		self._journalnode			= config['HOSTS'][host][vm]['journal_node']
 		self._initiatorname_iscsi	= config['HOSTS'][host][vm]['storage']['initiatorname_iscsi']
 		self._iscsi_target			= config['HOSTS'][host][vm]['storage']['iscsi_target']
+		self._forbidden_nodes		= config['HOSTS'][host][vm]['storage']['forbidden_nodes']
 		self._tps_fs				= config['HOSTS'][host][vm]['tps-fs']
 		self._cluster_name			= config['HOSTS'][host][vm]['cluster_name']
 		self._mgmtNic				= config['HOSTS'][host][vm]['mgmtNic']
@@ -101,6 +102,8 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
 		output += self._ssh_session.executeCli('_exec service iscsid restart')
 		output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
+		if self._forbidden_nodes:
+			output += self.remove_iscsiForbidden()
 		output += self._ssh_session.executeCli('tps iscsi restart')
 		time.sleep(15)
 		output += self._ssh_session.executeCli('tps multipath renew ')
@@ -233,7 +236,89 @@ class vm_node(object):
 				message ( "Failure in gen_dsakey  %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return False
 		return output
+
+	def get_iscsiSessions(self):
+		output = ''
+		output += self._ssh_session.executeCli('_exec iscsiadm -m session')
+		if output.find("iscsiadm: No active sessions.") != -1:
+			return False
+		session_regex = re.compile(ur'^tcp:\s+\[\d+\]\s+(?P<session>.*?),.*$', re.MULTILINE)
+		try :
+			return re.findall(session_regex, output)
+		except Exception:
+			return False
+
+	def get_iscsiNodes(self):
+		output = ''
+		output += self._ssh_session.executeCli('_exec iscsiadm -m node')
+		if output.find("iscsiadm: No records found") != -1:
+			return False
+		node_regex = re.compile(ur'^(?P<node>.*?),.*$', re.MULTILINE)
+		try :
+			return re.findall(node_regex, output)
+		except Exception:
+			return False
+		
+	def delete_iscsiNode(self,ip_port):
+		output = ''
+		if not ip_port :
+			return False
+		try :
+			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -o delete' % ip_port )
+			if output.find("a session is using it") != -1:
+				message ("Cannot delete node %s , a session exists for it" % ip_port,{'style':'NOK'})
+				return False
+			else :
+				message ("Deleted iscsi node %s " % ip_port,{'style':'OK'})
+				return True
+		except Exception:
+			message ("Unable to delete node %s => %s" % (ip_port,output) ,{'style':'NOK'})
+
+	def logout_iscsiNode(self,ip_port):
+		output = ''
+		if not ip_port :
+			return False
+		try :
+			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -u' % ip_port )
+			if output.find("successful") != -1:
+				message ("Successfully logged out of node %s" % ip_port,{'style':'OK'})
+				return True
+			else :
+				message ("Error logging out of iscsi node %s " % ip_port,{'style':'NOK'})
+				return False
+		except Exception:
+			message ("Unable to logout of session node %s => %s " % (ip_port,output),{'style':'NOK'})
+			return False
 	
+	def remove_iscsiForbidden(self):
+		output = ''
+		nodes = []
+		sessions = []
+		
+		if not self._forbidden_nodes :
+			return False
+		
+		nodes = self.get_iscsiNodes()
+		sessions = self.get_iscsiSessions()
+		for node in self._forbidden_nodes:
+			node += ":"  # avoids deletion of 192.168.181.111 when asked for 192.168.181.11 deletion 
+			if sessions:
+				for ip_port in sessions :
+					if ip_port.find(node) != -1:
+						self.logout_iscsiNode(ip_port)
+			if nodes:
+				for ip_port in nodes :
+					if ip_port.find(node) != -1:
+						self.delete_iscsiNode(ip_port)
+						break
+					else:
+						continue
+					message ("iScsi node %s not present in the system " % ip_port,{'style':'OK'})
+			else :
+				message ("No nodes present currently in system %s" % ip_port,{'style':'OK'})
+				
+		return "Success"	
+
 	def get_psef(self):
 		output = ''
 		output += self._ssh_session.executeCli("cli session terminal width 999")

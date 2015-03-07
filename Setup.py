@@ -482,6 +482,5 @@ if __name__ == '__main__':
 #TODO
 # FIX in case of --no-ha unregister cluster not called
 # Exception if there is one "virt volume fetch url" already running on Host system.retry after 5 min
-# Validate iso and img files are present and are iso & image files
 # validate other config.spec parameters.
 # Remove forbidden nodes from the iscsi connection after the setup

@@ -89,6 +89,7 @@ class session(object):
 				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
 				message ( "connect on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.transport = self.session.get_transport()
+				self.transport.set_keepalive(5)
 				message ( "transport on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				#self.transport.set_keepalive(15)
 				self.chan = self.session.invoke_shell()
@@ -302,8 +303,6 @@ class session(object):
 						time.sleep(wait)
 		output.lstrip()
 		return output
-
-
 
 	def read(self):
 		data = ""
