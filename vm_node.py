@@ -7,7 +7,7 @@ import commands
 import os,sys
 import random
 from session import session
-from Toolkit import message,terminate_self,clear_collector_logs
+from Toolkit import message,terminate_self,clear_collector_logs,get_startProcess
 
 class vm_node(object):
 	nodes_ip = {}
@@ -181,6 +181,21 @@ class vm_node(object):
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
 			self.set_user(user,password)
+		
+	def delete_iscsiNode(self,ip_port):
+		output = ''
+		if not ip_port :
+			return False
+		try :
+			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -o delete' % ip_port )
+			if output.find("a session is using it") != -1:
+				message ("Cannot delete node %s , a session exists for it" % ip_port,{'style':'NOK'})
+				return False
+			else :
+				message ("Deleted iscsi node %s " % ip_port,{'style':'OK'})
+				return True
+		except Exception:
+			message ("Unable to delete node %s => %s" % (ip_port,output) ,{'style':'NOK'})
 
 	def dottedQuadToNum(self,ip):
 		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
@@ -201,6 +216,44 @@ class vm_node(object):
 		output += self._host_ssh_session.executeCli("no cli default paging enable")
 		return output
 
+	def factory_revert(self):
+		output = ''
+		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
+		return output
+
+	def format_storage(self):
+		output = ''
+		format_option = ""
+		global_format_forced = self.config_ref['HOSTS']['force_format']
+		if global_format_forced:
+			format_option += "no-strict"
+			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			
+		for fs_name in self._tps_fs.keys():
+			ini_format_option = self._tps_fs[fs_name]['format']
+			if ini_format_option is False:
+				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				continue
+			
+			count = 10
+			wwid = self._tps_fs[fs_name]['wwid'].lower()
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeCli('tps multipath show')
+				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
+				if wwid in current_multipaths:
+					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
+					output += full_output.splitlines()[-1]
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeCli('tps multipath show')
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
+							 {'style': 'INFO'} )
+					time.sleep(1)
+					continue
+		return output
+	
 	def getName():
 			return self._name
 
@@ -258,71 +311,11 @@ class vm_node(object):
 			return re.findall(node_regex, output)
 		except Exception:
 			return False
-		
-	def delete_iscsiNode(self,ip_port):
-		output = ''
-		if not ip_port :
-			return False
-		try :
-			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -o delete' % ip_port )
-			if output.find("a session is using it") != -1:
-				message ("Cannot delete node %s , a session exists for it" % ip_port,{'style':'NOK'})
-				return False
-			else :
-				message ("Deleted iscsi node %s " % ip_port,{'style':'OK'})
-				return True
-		except Exception:
-			message ("Unable to delete node %s => %s" % (ip_port,output) ,{'style':'NOK'})
-
-	def logout_iscsiNode(self,ip_port):
-		output = ''
-		if not ip_port :
-			return False
-		try :
-			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -u' % ip_port )
-			if output.find("successful") != -1:
-				message ("Successfully logged out of node %s" % ip_port,{'style':'OK'})
-				return True
-			else :
-				message ("Error logging out of iscsi node %s " % ip_port,{'style':'NOK'})
-				return False
-		except Exception:
-			message ("Unable to logout of session node %s => %s " % (ip_port,output),{'style':'NOK'})
-			return False
-	
-	def remove_iscsiForbidden(self):
-		output = ''
-		nodes = []
-		sessions = []
-		
-		if not self._forbidden_nodes :
-			return False
-		
-		nodes = self.get_iscsiNodes()
-		sessions = self.get_iscsiSessions()
-		for node in self._forbidden_nodes:
-			node += ":"  # avoids deletion of 192.168.181.111 when asked for 192.168.181.11 deletion 
-			if sessions:
-				for ip_port in sessions :
-					if ip_port.find(node) != -1:
-						self.logout_iscsiNode(ip_port)
-			if nodes:
-				for ip_port in nodes :
-					if ip_port.find(node) != -1:
-						self.delete_iscsiNode(ip_port)
-						break
-					else:
-						continue
-					message ("iScsi node %s not present in the system " % ip_port,{'style':'OK'})
-			else :
-				message ("No nodes present currently in system %s" % ip_port,{'style':'OK'})
-				
-		return "Success"	
 
 	def get_psef(self):
 		output = ''
 		output += self._ssh_session.executeCli("cli session terminal width 999")
-		output += self._ssh_session.executeCli('_exec /bin/ps -ef')
+		output += self._ssh_session.executeCli('_exec /bin/ps -eo etime,args')
 		return output
 
 	def hostid_generator(self):
@@ -386,7 +379,7 @@ class vm_node(object):
 	def is_ResManUp(self):
 		response = self.get_psef()
 		try:
-			m1 = re.search(ur'^(?P<javaProcess>.*?\/bin\/java\s+-Dproc_resourcemanager[\s+\S+]*?)$',response,re.MULTILINE)
+			m1 = re.search(ur'^(?P<javaProcess>.*?\/bin\/java\s+-Dproc_resourcemanager.*?)$',response,re.MULTILINE)
 			if m1:
 				javaProcess = m1.group("javaProcess")
 				return javaProcess
@@ -399,6 +392,34 @@ class vm_node(object):
 	def info_yarn_Setup(self):
 		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report')
 
+	def logout_iscsiNode(self,ip_port):
+		output = ''
+		if not ip_port :
+			return False
+		try :
+			output += self._ssh_session.executeCli('_exec iscsiadm -m node -p %s -u' % ip_port )
+			if output.find("successful") != -1:
+				message ("Successfully logged out of node %s" % ip_port,{'style':'OK'})
+				return True
+			else :
+				message ("Error logging out of iscsi node %s " % ip_port,{'style':'NOK'})
+				return False
+		except Exception:
+			message ("Unable to logout of session node %s => %s " % (ip_port,output),{'style':'NOK'})
+			return False
+
+	def mount_storage(self):
+		output = ''
+		for fs_name in self._tps_fs.keys():
+			wwid = self._tps_fs[fs_name]['wwid'].lower()
+			mount_point = self._tps_fs[fs_name]['mount-point']
+			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
+			output +=  self._ssh_session.executeCli('no tps fs %s ' %(fs_name))
+			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
+			output +=  self._ssh_session.executeCli('tps fs %s mount-point %s' %(fs_name,mount_point))
+			output +=  self._ssh_session.executeCli('tps fs %s enable' %(fs_name))
+		return output
+	
 	def pingable(self,host):  
 		try:
 			if (os.name == "posix"):
@@ -411,88 +432,6 @@ class vm_node(object):
 		except Exception:
 			message ( "Canot Ping host %s" % host , {'style': 'FATAL'} )
 			return False
-
-	def ssh_self(self):
-		vm_up = False
-		if not self._ssh_session:           
-			timeOut = 600
-			while timeOut > 0:
-				if self.pingable(self._ip):
-					message ( "VM %s responds from %s " % (self._name,self._ip),				{'style': 'DEBUG'})
-					vm_up = True
-					break
-				else:
-					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds" % (self._name,self._ip),{'style': 'DEBUG'})
-					time.sleep(5)
-					timeOut = timeOut - 5       
-			if vm_up :
-				#Find out admin user pass ( if not in config set default)
-				username = 'admin'
-				password = 'admin@123'
-				for cred in self._enabledusers:
-					user,passwd = cred.split(":")
-					if user.find('admin') != -1:
-						username	= user
-						password	= passwd
-				self._ssh_session = session(self._ip, username , password)
-				return self._ssh_session
-			else :
-				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})
-				return False
-		elif  self._ssh_session :
-			return self._ssh_session
-		else:
-			return False
-
-	def factory_revert(self):
-		output = ''
-		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
-		return output
-
-	def format_storage(self):
-		output = ''
-		format_option = ""
-		global_format_forced = self.config_ref['HOSTS']['force_format']
-		if global_format_forced:
-			format_option += "no-strict"
-			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-			
-		for fs_name in self._tps_fs.keys():
-			ini_format_option = self._tps_fs[fs_name]['format']
-			if ini_format_option is False:
-				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
-				continue
-			
-			count = 10
-			wwid = self._tps_fs[fs_name]['wwid'].lower()
-			while count > 0 :
-				current_multipaths = self._ssh_session.executeCli('tps multipath show')
-				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
-				#output += current_multipaths 
-				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
-					output += full_output.splitlines()[-1]
-					break
-				elif wwid not in current_multipaths:
-					count = count - 1
-					output += self._ssh_session.executeCli('tps multipath show')
-					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
-							 {'style': 'INFO'} )
-					time.sleep(1)
-					continue
-		return output
-	
-	def mount_storage(self):
-		output = ''
-		for fs_name in self._tps_fs.keys():
-			wwid = self._tps_fs[fs_name]['wwid'].lower()
-			mount_point = self._tps_fs[fs_name]['mount-point']
-			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
-			output +=  self._ssh_session.executeCli('no tps fs %s ' %(fs_name))
-			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
-			output +=  self._ssh_session.executeCli('tps fs %s mount-point %s' %(fs_name,mount_point))
-			output +=  self._ssh_session.executeCli('tps fs %s enable' %(fs_name))
-		return output
 
 	def power_on(self):
 		output = ''
@@ -534,6 +473,35 @@ class vm_node(object):
 		output += self._ssh_session.executeCli('config write')
 		output += self._ssh_session.executeCli('reload')
 		return output
+
+	def remove_iscsiForbidden(self):
+		output = ''
+		nodes = []
+		sessions = []
+		
+		if not self._forbidden_nodes :
+			return False
+		
+		nodes = self.get_iscsiNodes()
+		sessions = self.get_iscsiSessions()
+		for node in self._forbidden_nodes:
+			node += ":"  # avoids deletion of 192.168.181.111 when asked for 192.168.181.11 deletion 
+			if sessions:
+				for ip_port in sessions :
+					if ip_port.find(node) != -1:
+						self.logout_iscsiNode(ip_port)
+			if nodes:
+				for ip_port in nodes :
+					if ip_port.find(node) != -1:
+						self.delete_iscsiNode(ip_port)
+						break
+					else:
+						continue
+					message ("iScsi node %s not present in the system " % ip_port,{'style':'OK'})
+			else :
+				message ("No nodes present currently in system %s" % ip_port,{'style':'OK'})
+				
+		return "Success"	
 
 	def registerNameNode(self):
 		self.name_nodes.append(self._name)
@@ -698,8 +666,39 @@ class vm_node(object):
 
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
 		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
-		
 		return output
+	
+	def ssh_self(self):
+		vm_up = False
+		if not self._ssh_session:           
+			timeOut = 600
+			while timeOut > 0:
+				if self.pingable(self._ip):
+					message ( "VM %s responds from %s " % (self._name,self._ip),				{'style': 'DEBUG'})
+					vm_up = True
+					break
+				else:
+					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds" % (self._name,self._ip),{'style': 'DEBUG'})
+					time.sleep(5)
+					timeOut = timeOut - 5       
+			if vm_up :
+				#Find out admin user pass ( if not in config set default)
+				username = 'admin'
+				password = 'admin@123'
+				for cred in self._enabledusers:
+					user,passwd = cred.split(":")
+					if user.find('admin') != -1:
+						username	= user
+						password	= passwd
+				self._ssh_session = session(self._ip, username , password)
+				return self._ssh_session
+			else :
+				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})
+				return False
+		elif  self._ssh_session :
+			return self._ssh_session
+		else:
+			return False
 
 	def unregisterNameNode(self):
 		self.name_nodes.remove(self._name)
@@ -731,8 +730,15 @@ class vm_node(object):
 		validate_status = False
 		while retry <= 15:
 			try:
-				if self.is_ResManUp():
+				res_man = self.is_ResManUp()
+				if res_man :
 					message ("Resource Manager is up in %s" % self._name, {'style':'ok'} )
+					res_manStart = get_startProcess(res_man)
+					message ("Resource Manager is running since %s seconds" % res_manStart, {'style':'info'})
+					if ( res_manStart < 300):
+						time2wait = 300 - res_manStart
+						message ("Waiting for %s seconds before running hdfs report" % time2wait, {'style':'info'})
+						time.sleep(time2wait)
 					output += self.info_yarn_Setup()
 					validate_status = True
 					break

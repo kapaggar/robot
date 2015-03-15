@@ -167,6 +167,46 @@ def get_system_date():
     now = time.strftime("%c")
     return now
 
+def get_startProcess(process):
+		if not process:
+			return False
+		try:
+			m1 = re.search(ur'^\s*?(?P<start_time>\S+)\s+.*?$',process,re.MULTILINE)
+			if m1:
+				start_time = m1.group("start_time")
+				pidInfo = start_time.partition("-")
+				if pidInfo[1] == '-':
+					# there is a day
+					days = int(pidInfo[0])
+					rest = pidInfo[2].split(":")
+					hours = int(rest[0])
+					minutes = int(rest[1])
+					seconds = int(rest[2])
+				else:
+					days = 0
+					rest = pidInfo[0].split(":")
+					if len(rest) == 3:
+						hours = int(rest[0])
+						minutes = int(rest[1])
+						seconds = int(rest[2])
+					elif len(rest) == 2:
+						hours = 0
+						minutes = int(rest[0])
+						seconds = int(rest[1])
+					else:
+						hours = 0
+						minutes = 0
+						seconds = int(rest[0])
+				
+				# get the start time
+				secondsSinceStart = days*24*3600 + hours*3600 + minutes*60 + seconds
+				return secondsSinceStart
+			else:
+				return False
+		except Exception:
+			message ( "Error matching start_time" , {'to_log':1 , 'style': 'DEBUG'} ) 
+			return False
+
 def initialise_log_trace_and_truncate(logfile_name):
 	'''
 	Its job is to truncate the log and trace file if present.
