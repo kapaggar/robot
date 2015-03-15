@@ -211,11 +211,16 @@ class vm_node(object):
 		message ( "deleted volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 
-	def disable_paging(remote_conn):
+	def disable_paging(self):
 		output = ''
-		output += self._host_ssh_session.executeCli("no cli default paging enable")
+		output += self._ssh_session.executeCli("no cli default paging enable")
 		return output
 
+	def disable_timeout(self):
+		output = ''
+		output += self._ssh_session.executeCli("cli session auto-logout 300") # Setting 5 hour session timeout
+		return output
+	
 	def factory_revert(self):
 		output = ''
 		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
@@ -691,6 +696,8 @@ class vm_node(object):
 						username	= user
 						password	= passwd
 				self._ssh_session = session(self._ip, username , password)
+				self.disable_paging()
+				self.disable_timeout()
 				return self._ssh_session
 			else :
 				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})
@@ -744,7 +751,7 @@ class vm_node(object):
 					break
 				else:
 					retry += 1
-					message ("Try %s. Resource Manager is not running. Waiting total 15 min" % retry, {'style':'WARNING'})
+					message ("Attempt %s. Resource Manager is not running. Waiting total 15 min" % retry, {'style':'WARNING'})
 					time.sleep(60)
 			except Exception:
 				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
