@@ -241,12 +241,14 @@ UserKnownHostsFile /dev/null
 		for fs_name in self._tps_fs.keys():
 			wwid 			= self._tps_fs[fs_name]['wwid'].lower()
 			mount_point 	= self._tps_fs[fs_name]['mount-point']
+			output		   += self._ssh_session.executeShell('mkdir -p %s' 	% (mount_point))
 			dm_partition 	= self._ssh_session.executeShell('readlink -f /dev/disk/by-id/dm-uuid-part1-mpath-%s' 	% (wwid)).splitlines()[-1]
 			uuid 			= self._ssh_session.executeShell('blkid %s |grep -o \'[A-Za-z0-9-]\\{36\\}\' ' %(dm_partition)).splitlines()[-1]
 			mapper_device 	= self._ssh_session.executeShell('findfs UUID=%s ' %(uuid)).splitlines()[-1]
 #			output 			+= self._ssh_session.executeShell('sed -i -e \'s#^%s.*$#%s %s _netdev 0 0#\' /etc/fstab' %(mapper_device, mapper_device, mount_point))
-			output 			+= self._ssh_session.executeShell('echo \"%s %s _netdev 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
+			output 			+= self._ssh_session.executeShell('echo \"%s %s _netdev ext3 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
 			output			+= self._ssh_session.executeShell('mount -av')
+			output			+= self._ssh_session.executeShell('restorecon -R %s '	% (mount_point))
 		return output
 	
 	def centos_rotate_logs(self):
