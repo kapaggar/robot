@@ -335,5 +335,14 @@ def terminate_self(mesg):
         message ("Killing Self", {'style':'nok'} )
     os.kill(os.getpid(), signal.SIGTERM)
 
+def write_to_file(file_name,string_to_write):
+    try:
+        with open(file_name, "w") as file_handle:
+            file_handle.write(string_to_write)
+            file_handle.close()
+    except IOError:
+        with open(file_name, "w+") as file_handle:
+            file_handle.write(string_to_write)
+
 if __name__ == '__main__':
     pass

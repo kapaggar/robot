@@ -38,6 +38,62 @@ def basic_settings(tuples):
 			terminate_self("Exiting")
 	return "Success"
 
+def centos_basic_settings(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now going inside VM %s, setting up ssh connections" % vm_name			, {'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "Centos RotateLog_Output = %s " %vm.centos_rotate_logs()				, {'style': 'INFO'} )
+			if opt_reconfig:
+				message ( "Centos Factory-Revert_Output = %s " %vm.centos_factory_revert()	, {'style': 'INFO'} )
+			message ( "Centos get Base repo = %s " 			%vm.centos_get_repo()			, {'style': 'INFO'} )
+			message ( "Centos Install basic packages = %s " %vm.centos_install_base()		, {'style': 'INFO'} )
+			message ( "Centos Configure ntp  = %s " 		%vm.centos_cfg_ntp()			, {'style': 'INFO'} )
+			message ( "Centos Hostname maps Output = %s "	%vm.centos_setIpHostMaps()		, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_keygen(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "Centos generate keys = %s " %vm.centos_genkeys('root')			, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_keyshare(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "Centos distribute keys = %s " %vm.centos_distkeys('root')		, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_cfg_storage(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now setting up storage inside Centos VM %s" % vm_name, {'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			if vm.has_storage():
+				message ("Centos Bring-Storage_Output = [%s]" % vm.centos_bring_storage() ,			{'style': 'INFO'} )
+				if not opt_skip_format :
+					message ( "Centos FormatStorage_Output = [%s]" % vm.centos_format_storage() ,	{'style': 'INFO'} )
+				message ( "Centos MountStorage_Output = [%s]" % vm.centos_mount_storage(),			{'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
 def clear_ha(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
@@ -105,7 +161,20 @@ def do_manufacture(hosts):
 	threads = []
 	for host_name in hosts:
 			host = config['HOSTS'][host_name]['host_ref']
-			newThread = threading.Thread(target=manufVMs, args = (host,))
+			newThread = threading.Thread(target=manuf_VMs, args = (host,))
+			newThread.setDaemon(True)
+			newThread.start()
+			threads.append(newThread)
+	for thread in threads:
+			thread.join()
+	return "Success"
+
+def do_centosInstall(hosts):
+	message ( 'RPM install Option Set', {'style': 'INFO'} ) 
+	threads = []
+	for host_name in hosts:
+			host = config['HOSTS'][host_name]['host_ref']
+			newThread = threading.Thread(target=manuf_Centos_VMs, args = (host,))
 			newThread.setDaemon(True)
 			newThread.start()
 			threads.append(newThread)
@@ -175,7 +244,7 @@ def get_allvms(config):
 	return tuples
 
 
-def manufVMs(host):
+def manuf_VMs(host):
 	time.sleep(1)
 	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
 	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
@@ -194,6 +263,27 @@ def manufVMs(host):
 	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
 	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
 	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
+	return "Success"
+
+def manuf_Centos_VMs(host):
+	time.sleep(1)
+	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
+	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
+	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
+	if opt_lazy:
+		# if lazy option given we check if centos_template is present
+		# otherwise we download from the location given in the INI file
+		if host.is_centos_template_present():
+			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
+		else :
+			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
+			terminate_self("Template missing in host %s" % host.getname())
+	else:
+		message (  "Get_Centos_template_Output = [%s]"	% host.get_centos_template(),{'style': 'INFO'} )
+	message ( "DeleteVMs_Output = [%s]"				% host.deleteVMs()			,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = [%s]" 			% host.declareVMs()			,{'style': 'INFO'} )
+	message ( "Create_Centos_VM_Output = [%s]" 		% host.instantiate_centos_VMs()		,{'style': 'INFO'} )
+	message ( "PowerON-VMs_Output = [%s]" 			% host.startVMs()			,{'style': 'INFO'} )
 	return "Success"
 
 def objectify_vms(tuples):
@@ -243,7 +333,7 @@ def setupStorage(tuples):
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.has_storage():
-				message ("Bring-Strogage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
+				message ("Bring-Storage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
 				if not opt_skip_format :
 					message ( "FormatStorage_Output = [%s]" % vm.format_storage() ,	{'style': 'INFO'} )
 				message ( "MountStorage_Output = [%s]" % vm.mount_storage(),			{'style': 'INFO'} )
@@ -377,6 +467,11 @@ if __name__ == '__main__':
 						action='store_true',
 						default=False,
 						help='Send results and report in email')
+	parser.add_argument("--rpm",
+						dest='rpm_model',
+						action='store_true',
+						default=False,
+						help='Test Platform rpm model')
 	parser.add_argument("--skip-vm",
 						nargs='+',
 						dest='skip_vm',
@@ -398,7 +493,9 @@ if __name__ == '__main__':
 	opt_colsanity			= args.col_sanity
 	opt_colsanity_only		= args.col_sanity_only
 	opt_email				= args.email
+	opt_rpm					= args.rpm_model
 	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
+	os.environ['RPM_MODE']	= ("", "True")[opt_rpm]
 	allvms = None
 	if args.log:
 		os.environ["LOGFILE_NAME"] = args.log[0]
@@ -417,7 +514,7 @@ if __name__ == '__main__':
 		if opt_wipe and opt_reconfig:
 			message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
 			sys.exit(1)
-		if not opt_lazy and not opt_reconfig :
+		if not opt_lazy and not opt_reconfig and not opt_rpm :
 			message ( "Verifying iso exists.",			{'style':'INFO'} )
 			if not check_iso_exists(config):
 				terminate_self("Cannot proceed further as iso not present")
@@ -442,14 +539,19 @@ if __name__ == '__main__':
 		connect_hosts(hosts)
 		if opt_wipe :
 			wipe_vmpool(hosts)
+		if opt_rpm  :
+			install_type = 'rpm_model'
+			if not opt_reconfig:
+				do_centosInstall(hosts)
 		if 'manufacture' in install_type:
 			if not opt_reconfig:
 				do_manufacture(hosts)
 
+
 	allvms = get_allvms(config)
 	objectify_vms(allvms)
-	
-	if not opt_colsanity_only:
+	#terminate_self("Exiting")
+	if not opt_colsanity_only and not opt_rpm:
 		basic_settings(allvms)
 		generate_keys(allvms)
 		shareKeys(allvms)
@@ -471,11 +573,18 @@ if __name__ == '__main__':
 			clean_results(attachment)
 		else :
 			message ('Not sending out emails' ,{'style' : 'info'})
-	
 		manuf_runtime = time.time() - start_time
 		message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
+	
+	if opt_rpm:
+		centos_basic_settings(allvms)
+		centos_keygen(allvms)
+		centos_keyshare(allvms)
+		centos_cfg_storage(allvms)
+		#install_reflex_rpms(allvms)
+
 		
-	if opt_colsanity is True or opt_colsanity_only is True :
+	if opt_colsanity or opt_colsanity_only :
 		checkColSanity(allvms)
 		attachment = collector_results()
 		notify_email(config,"Collector Sanity Report",attachment)

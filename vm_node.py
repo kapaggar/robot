@@ -32,6 +32,7 @@ class vm_node(object):
 		self._snmpsink				= config['HOSTS']['snmpsink_server']
 		self._release_ver			= config['HOSTS']['release_ver']
 		self._upgrade_img			= config['HOSTS']['upgrade_img']
+		self._centos_repo_path		= config['HOSTS']['centos_repo_path']
 		self._brMgmt				= config['HOSTS'][host]['brMgmt']
 		self._brStor				= config['HOSTS'][host]['brStor']
 		self._template				= config['HOSTS'][host]['template_file']
@@ -111,7 +112,156 @@ class vm_node(object):
 		time.sleep(15)
 		output += self._ssh_session.executeCli('tps multipath renew ')
 		return output
+	
+	def centos_bring_storage(self):
+		output = ''
+		output += self._ssh_session.executeShell('echo \"InitiatorName=%s\" > /etc/iscsi/initiatorname.iscsi ' %self._initiatorname_iscsi)
+		output += self._ssh_session.executeShell('service iscsi stop;echo')
+		output += self._ssh_session.executeShell('service iscsid restart;echo')
+		time.sleep(5)
+		output += self._ssh_session.executeShell('iscsiadm -m discovery -t st -p %s' % self._iscsi_target)
+		output += self._ssh_session.executeShell('service iscsi restart')
+		output += self._ssh_session.executeShell('chkconfig iscsi on')
+		time.sleep(15)
+		output += self._ssh_session.executeShell('mpathconf --enable --with_multipathd y --with_module y --find_multipaths  y  --user_friendly_names y')
+		time.sleep(5)
+		output += self._ssh_session.executeShell('multipath')
+		return output
 
+	def centos_cfg_ntp(self):
+		output = ''
+		ntp_config = '''restrict default nomodify notrap noquery
+driftfile /var/lib/ntp/drift
+restrict 127.0.0.1
+restrict -6 ::1
+server %s iburst maxpoll 9
+includefile /etc/ntp/crypto/pw
+keys /etc/ntp/keys
+''' %(self._ntpserver)
+		output += self._ssh_session.executeShell('ntpdate -u %s' %(self._ntpserver))
+		output += self._ssh_session.executeShell('echo \"%s\" > /etc/ntp.conf ' %(ntp_config))
+		output += self._ssh_session.executeShell('service ntpd start' %(ntp_config))
+		output += self._ssh_session.executeShell('chkconfig ntpd on ' %(ntp_config))
+		output += self._ssh_session.executeShell('chkconfig ntpdate on ' %(ntp_config))
+		return output
+
+	def centos_format_storage(self):
+		output = ''
+		format_option = ""
+		global_format_forced = self.config_ref['HOSTS']['force_format']
+		if global_format_forced:
+			format_option += "no-strict"
+			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			
+		for fs_name in self._tps_fs.keys():
+			ini_format_option = self._tps_fs[fs_name]['format']
+			if ini_format_option is False:
+				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				continue
+			
+			count = 10
+			wwid = self._tps_fs[fs_name]['wwid'].lower()
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeShell('multipath -ll')
+				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
+				if wwid in current_multipaths:
+					dm_device = self._ssh_session.executeShell('readlink -f /dev/disk/by-id/dm-uuid-mpath-%s' 			% (wwid)).splitlines()[-1]
+					full_output =  self._ssh_session.executeShell('parted -s %s -- \"rm 1\"' 							% (dm_device))
+					full_output =  self._ssh_session.executeShell('parted -s %s -- mklabel gpt ' 						% (dm_device))
+					full_output =  self._ssh_session.executeShell('parted -s %s -- unit %% mkpart primary ext3 0 100' 	% (dm_device))
+					dm_partition = self._ssh_session.executeShell('readlink -f /dev/disk/by-id/dm-uuid-part1-mpath-%s' 	% (wwid)).splitlines()[-1]
+					full_output =  self._ssh_session.executeShell('mkfs.ext3 %s -L \"%s\"'				 				% (dm_partition,fs_name))
+					output += full_output.splitlines()[-1]
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeShell('multipath')
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
+							 {'style': 'INFO'} )
+					time.sleep(1)
+					continue
+		return output
+
+	def centos_factory_revert(self):
+		output = ''
+		output += self._ssh_session.executeShell('service reflex stop')
+		output += self._ssh_session.executeShell('yum erase -y reflex*')
+		output += self._ssh_session.executeShell('rm -rf  /opt/reflex')
+		return output
+	
+	def centos_get_repo(self):
+		output = ''
+		output += self._ssh_session.executeShell('curl %s -o /etc/yum.repos.d/CentOS-Base.repo' % (self._centos_repo_path))
+		return output
+	
+	def centos_distkeys(self,user):
+		output = ''
+		ssh_client_config = '''Host *
+CheckHostIP no
+ConnectionAttempts 1
+IdentityFile ~/.ssh/id_dsa
+KeepAlive yes
+PubkeyAuthentication yes
+StrictHostKeyChecking no
+UsePrivilegedPort no
+UserKnownHostsFile /dev/null
+'''
+		output += self._ssh_session.executeShell('echo \"%s\" > ~%s/.ssh/config ' %(ssh_client_config,user))
+		for creds in self.pub_keys:
+			username,pubkey = creds.split(":")
+			if username != user:
+				continue
+			output += self._ssh_session.executeShell('echo \"%s\" >> ~%s/.ssh/authorized_keys ' %(pubkey,user))
+		return output
+		
+	def centos_genkeys(self,user):
+		output = ''
+		output += self._ssh_session.executeShell('yes | ssh-keygen -q -t dsa -N \"\" -f ~%s/.ssh/id_dsa;echo' %(user))
+		self._dsakey = self._ssh_session.executeShell('cat ~%s/.ssh/id_dsa.pub ' %(user))
+		tuples = user + ":" + self._dsakey
+		self.pub_keys.append(tuples)
+		return output
+	
+	def centos_install_base(self):
+		output = ''
+		response = ''
+		output 	+= self._ssh_session.executeShell('yum clean all' )
+		response = self._ssh_session.executeShell('yum install -y wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted' )
+		output += response[-80:]
+		# I dont like to hardcode these packages location, but thats how it is now.
+		response = self._ssh_session.executeShell('yum install -y http://kite.ggn.in.guavus.com/users/kapil/RPM/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
+		output += response[-80:]
+		response = self._ssh_session.executeShell('yum install -y http://kite.ggn.in.guavus.com/users/kapil/RPM/virtual-java-1.8-31.noarch.rpm' )
+		output += response[-80:]
+		return output
+	
+	def centos_mount_storage(self):
+		output = ''
+		for fs_name in self._tps_fs.keys():
+			wwid 			= self._tps_fs[fs_name]['wwid'].lower()
+			mount_point 	= self._tps_fs[fs_name]['mount-point']
+			dm_partition 	= self._ssh_session.executeShell('readlink -f /dev/disk/by-id/dm-uuid-part1-mpath-%s' 	% (wwid)).splitlines()[-1]
+			uuid 			= self._ssh_session.executeShell('blkid %s |grep -o \'[A-Za-z0-9-]\\{36\\}\' ' %(dm_partition)).splitlines()[-1]
+			mapper_device 	= self._ssh_session.executeShell('findfs UUID=%s ' %(uuid)).splitlines()[-1]
+#			output 			+= self._ssh_session.executeShell('sed -i -e \'s#^%s.*$#%s %s _netdev 0 0#\' /etc/fstab' %(mapper_device, mapper_device, mount_point))
+			output 			+= self._ssh_session.executeShell('echo \"%s %s _netdev 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
+			outout			+= self._ssh_session.executeShell('mount -av')
+		return output
+	
+	def centos_rotate_logs(self):
+		output = ''
+		output += self._ssh_session.executeShell('logrotate -f /etc/logrotate.conf')
+		return output
+	
+	def centos_setIpHostMaps(self):
+		output = ''
+		for vm in self.nodes_ip.keys():
+#			output += self._ssh_session.executeShell('sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts' %(self.nodes_ip[vm],self.nodes_ip[vm],vm))
+			output += self._ssh_session.executeShell('echo \"%s %s\" >> /etc/hosts' %(self.nodes_ip[vm],vm))
+
+		return output
+	
 	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
 		message ( "cloned volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
@@ -570,7 +720,7 @@ class vm_node(object):
 			output += self._ssh_session.executeCli('interface %s ip address %s /%s' %(self._storNic, self._stor_ip, self._stor_mask))
 		return output
 	
-	def setup_HDFS(self):	
+	def setup_HDFS(self):
 		HA =''
 		journal_nodes = ''
 		output = ''
@@ -621,7 +771,69 @@ class vm_node(object):
 			return False # raise exception
 		output =  session.executeCli('cluster master self')
 		return output
+	
+	def set_centos_db(self):
+		output = ''
+		cfg_mgmtNic = '''DEVICE=%s
+TYPE=Ethernet
+HWADDR=%s
+BOOTPROTO=static
+IPADDR=%s
+PREFIX=%s
+GATEWAY=%s
+DNS1=%s
+DEFROUTE=yes
+NAME=%s
+ONBOOT=yes
+IPV6INIT=no
+''' % ( self._mgmtNic, self._mgmtMac, self._ip, self._mask, self._gw, self._name_server, self._mgmtNic )
 
+		cfg_storNic = '''DEVICE=%s
+TYPE=Ethernet
+BOOTPROTO=none
+IPADDR=%s
+PREFIX=%s
+DEFROUTE=yes
+NAME=%s
+ONBOOT=yes
+IPV6INIT=no
+''' % (self._storNic , self._stor_ip, self._stor_mask, self._storNic  )
+		cfg_hostname = '''NETWORKING=yes
+HOSTNAME=%s
+''' % ( self._name)
+		var_offset = None
+		re_varoffset = re.compile( r"^\S+\.img1\s+\S\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
+		#output += self._host_ssh_session.executeCli('_exec tar -xf %s' % self._diskimageFull )
+		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
+		
+		try:
+			match = re_varoffset.search(layout_template)
+			if match:
+				var_offset = match.group("varOffset")
+				message ( "offset in ROOT_FS is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
+			else:
+				message ( "Cannot find Offset for ROOTFS ",{'to_trace': '1' ,'style': 'TRACE'}  )
+				return False
+		except Exception:
+			message ( "error matching Offset in %s" % self._diskimageFull			, {'style': 'INFO'} )
+			return False
+		
+		offset_bytes = int(var_offset) * 512
+		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
+		loop_dev = self._get_loop_device()
+		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) 
+		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/' )
+		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
+		#TODO make a config.dir backp
+		output +=  self._host_ssh_session.executeShell('echo \"%s\" > /mnt/cdrom/etc/sysconfig/network-scripts/ifcfg-%s' %(cfg_mgmtNic, self._mgmtNic))
+		output +=  self._host_ssh_session.executeShell('echo \"%s\" > /mnt/cdrom/etc/sysconfig/network-scripts/ifcfg-%s' %(cfg_storNic, self._storNic))
+		output +=  self._host_ssh_session.executeShell('echo \"%s\" > /mnt/cdrom/etc/sysconfig/network' %(cfg_hostname))
+		output +=  self._host_ssh_session.executeCli('_exec /bin/rm -f /mnt/cdrom/etc/udev/rules.d/70-persistent-net.rules' )
+		output +=  self._host_ssh_session.executeCli('_exec /bin/rm -f /mnt/cdrom/lib/udev/rules.d/75-persistent-net-generator.rules' )
+		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
+		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
+		return output
+	
 	def set_user(self,user,password):
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
@@ -649,7 +861,8 @@ class vm_node(object):
 		offset_bytes = int(var_offset) * 512
 		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
 		loop_dev = self._get_loop_device()
-		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) #TODO fix this for variable size Disk instead of  $((59510305 * 512)) 
+		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes ))
+		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/')
 		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
 		#TODO make a config.dir backp
 		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
@@ -691,16 +904,22 @@ class vm_node(object):
 					timeOut = timeOut - 5       
 			if vm_up :
 				#Find out admin user pass ( if not in config set default)
-				username = 'admin'
-				password = 'admin@123'
+				#username = 'admin'
+				#password = 'admin@123'
 				for cred in self._enabledusers:
 					user,passwd = cred.split(":")
-					if user.find('admin') != -1:
-						username	= user
-						password	= passwd
+					if os.environ['RPM_MODE'] :
+						if user.find('root') != -1:
+							username	= user
+							password	= passwd
+					else :
+						if user.find('admin') != -1:
+							username	= user
+							password	= passwd
 				self._ssh_session = session(self._ip, username , password)
-				self.disable_paging()
-				self.disable_timeout()
+				if not os.environ['RPM_MODE'] :
+					self.disable_paging()
+					self.disable_timeout()
 				return self._ssh_session
 			else :
 				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})

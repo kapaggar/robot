@@ -18,6 +18,8 @@ class Host(object):
 		self._ntp_server		= self.config['HOSTS']['ntp_server']
 		self._iso_path			= self.config['HOSTS']['iso_path']
 		self._release_ver		= self.config['HOSTS']['release_ver']
+		self._centos_template	= self.config['HOSTS']['centos_template_path']
+		self._centos_template_file= self.config['HOSTS'][self._name ]['centos_template_file']
 		self._template_file		= self.config['HOSTS'][self._name ]['template_file']
 		self._ip				= self.config['HOSTS'][self._name ]['ip']
 		self._username			= self.config['HOSTS'][self._name ]['username']
@@ -111,6 +113,29 @@ class Host(object):
 			return full_iso_path
 		elif self._iso_path is not None:
 			return self._iso_path
+
+	def get_template_path(self):
+		centos_template_path = self.config['HOSTS']['centos_template_path']
+		return centos_template_path
+
+	def get_centos_template(self):
+		output = ''
+		response = ''
+		centos_template_path = self.get_template_path()
+		message ("CentOS template to fetch = %s" % centos_template_path,{'style':'INFO'})
+		try :
+			response =  self._ssh_session.executeCli('virt volume fetch url %s' % centos_template_path,wait=2 )
+			output += self._ssh_session.executeCli('_exec tar -C /data/virt/pools/default/ -xf /data/virt/pools/default/template.tgz' )
+			if "failed" in response:
+				message ("Cannot fetch url %s on host %s"% (centos_template_path,self.getname()),{'style':'NOK'})
+				message ("Reason %s" % response,{'style':'DEBUG'})
+				terminate_self("Exiting.")
+			else :
+				output += response[-80:] + "Success"
+		except Exception :
+			message ("Unable to fetch url %s in host %s"% (centos_template_path,self.getname()),{'style':'NOK'})
+			terminate_self("Exiting.") 
+		return output
 	
 	def getMfgCd(self):
 		output = ''
@@ -168,13 +193,30 @@ class Host(object):
 		else :
 			return True
 
+	def is_centos_template_present(self):
+		output = ''
+		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._centos_template_file)
+		if output.find("No such file or directory") != -1:
+			return False
+		else :
+			return True
+		
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "Clone-Volume_Output = [%s]" % vm.clone_volume()	, {'style': 'INFO'} )
-			message ( "VM-Configure_Output = [%s]" % vm.configure()		, {'style': 'INFO'} )
-			message ( "VM-SetMfgDB_Output = [%s]" % vm.set_mfgdb()		, {'style': 'INFO'} )
+			message ( "Clone-Volume_Output	= [%s]" % vm.clone_volume()		, {'style': 'INFO'} )
+			message ( "VM-Configure_Output	= [%s]" % vm.configure()		, {'style': 'INFO'} )
+			message ( "VM-SetMfgDB_Output	= [%s]" % vm.set_mfgdb()		, {'style': 'INFO'} )
+		return "Success"
 
+	def instantiate_centos_VMs(self):
+		for vm_name in self._vms:
+			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
+			message ( "Clone-Volume_Output	= [%s]" % vm.clone_volume()		, {'style': 'INFO'} )
+			message ( "VM-Configure_Output	= [%s]" % vm.configure()		, {'style': 'INFO'} )
+			message ( "VM-SetMfgDB_Output	= [%s]" % vm.set_centos_db()	, {'style': 'INFO'} )
+		return "Success"
+			
 	def synctime(self):
 		output = ''
 		output += self._ssh_session.executeCli('ntpdate  %s' %self._ntp_server )
@@ -210,9 +252,10 @@ class Host(object):
 	
 	def wipe_setup(self):
 		output = ''
-		cmd  = "pkill  /usr/libexec/qemu-kvm \n"
+		cmd  = "pkill -9 qemu-kvm \n"
 		cmd += "rm -rf /data/virt/pools/default/*.iso \n"
 		cmd += "rm -rf /data/virt/pools/default/*.img \n"
+		cmd += "rm -rf /data/virt/pools/default/*.tgz \n"
 		output +=  self._ssh_session.executeShell(cmd)
 		if output.find("cannot") != -1:
 			return output + "Fail"
