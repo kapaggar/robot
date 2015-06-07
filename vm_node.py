@@ -140,9 +140,9 @@ keys /etc/ntp/keys
 ''' %(self._ntpserver)
 		output += self._ssh_session.executeShell('ntpdate -u %s' %(self._ntpserver))
 		output += self._ssh_session.executeShell('echo \"%s\" > /etc/ntp.conf ' %(ntp_config))
-		output += self._ssh_session.executeShell('service ntpd start' %(ntp_config))
-		output += self._ssh_session.executeShell('chkconfig ntpd on ' %(ntp_config))
-		output += self._ssh_session.executeShell('chkconfig ntpdate on ' %(ntp_config))
+		output += self._ssh_session.executeShell('service ntpd start' )
+		output += self._ssh_session.executeShell('chkconfig ntpd on ')
+		output += self._ssh_session.executeShell('chkconfig ntpdate on ')
 		return output
 
 	def centos_format_storage(self):
@@ -246,7 +246,7 @@ UserKnownHostsFile /dev/null
 			mapper_device 	= self._ssh_session.executeShell('findfs UUID=%s ' %(uuid)).splitlines()[-1]
 #			output 			+= self._ssh_session.executeShell('sed -i -e \'s#^%s.*$#%s %s _netdev 0 0#\' /etc/fstab' %(mapper_device, mapper_device, mount_point))
 			output 			+= self._ssh_session.executeShell('echo \"%s %s _netdev 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
-			outout			+= self._ssh_session.executeShell('mount -av')
+			output			+= self._ssh_session.executeShell('mount -av')
 		return output
 	
 	def centos_rotate_logs(self):
