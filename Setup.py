@@ -47,13 +47,57 @@ def centos_basic_settings(tuples):
 			message ( "Centos RotateLog_Output = %s " %vm.centos_rotate_logs()				, {'style': 'INFO'} )
 			if opt_reconfig:
 				message ( "Centos Factory-Revert_Output = %s " %vm.centos_factory_revert()	, {'style': 'INFO'} )
-			message ( "Centos get Base repo = %s " 			%vm.centos_get_repo()			, {'style': 'INFO'} )
 			message ( "Centos Install basic packages = %s " %vm.centos_install_base()		, {'style': 'INFO'} )
+			message ( "Centos get Base repo = %s " 			%vm.centos_get_repo()			, {'style': 'INFO'} )
 			message ( "Centos Configure ntp  = %s " 		%vm.centos_cfg_ntp()			, {'style': 'INFO'} )
 			message ( "Centos Hostname maps Output = %s "	%vm.centos_setIpHostMaps()		, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
+	return "Success"
+
+def centos_cfg_storage(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now setting up storage inside Centos VM %s" % vm_name, {'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			if vm.has_storage():
+				message ("Centos Bring-Storage_Output = [%s]" % vm.centos_bring_storage() ,			{'style': 'INFO'} )
+				if not opt_skip_format :
+					message ( "Centos FormatStorage_Output = [%s]" % vm.centos_format_storage() ,	{'style': 'INFO'} )
+				message ( "Centos MountStorage_Output = [%s]" % vm.centos_mount_storage(),			{'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_checkHDFS(tuples):
+	output = ''
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				response = vm.centos_validate_HDFS()
+				message ("Centos Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+				output += response
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
+
+def centos_install_reflex(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now installing reflex components via yum inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				message ("Centos yum reflex install  = [%s]" % vm.centos_install_reflex(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+				terminate_self("Exiting")
 	return "Success"
 
 def centos_keygen(tuples):
@@ -78,20 +122,32 @@ def centos_keyshare(tuples):
 			terminate_self("Exiting")
 	return "Success"
 
-def centos_cfg_storage(tuples):
+def centos_setupHDFS(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up storage inside Centos VM %s" % vm_name, {'style': 'INFO'} )
+		message ( "Now setting up HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				message ("Centos Setup HDFS_Output = [%s]" % vm.centos_setup_HDFS(),{'style': 'INFO'} )
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+				terminate_self("Exiting")
+	return "Success"
+
+def centos_setupClusters(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now setting clusters inside VM %s" % vm_name, {'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			if vm.has_storage():
-				message ("Centos Bring-Storage_Output = [%s]" % vm.centos_bring_storage() ,			{'style': 'INFO'} )
-				if not opt_skip_format :
-					message ( "Centos FormatStorage_Output = [%s]" % vm.centos_format_storage() ,	{'style': 'INFO'} )
-				message ( "Centos MountStorage_Output = [%s]" % vm.centos_mount_storage(),			{'style': 'INFO'} )
+			if vm.is_clusternode():
+				message ( "Centos Setup Cluster_Output = %s " % vm.centos_setclustering()			, {'style': 'INFO'} )
+				time.sleep(5) # Let clustering settle down			else:
+				message ( "nothing to do in %s" %vm_name				, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-			terminate_self("Exiting")
+			terminate_self("Exiting")	
 	return "Success"
 
 def clear_ha(tuples):
@@ -577,13 +633,15 @@ if __name__ == '__main__':
 		message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
 	
 	if opt_rpm:
-		centos_basic_settings(allvms)
-		centos_keygen(allvms)
-		centos_keyshare(allvms)
-		centos_cfg_storage(allvms)
-		#install_reflex_rpms(allvms)
+		#centos_basic_settings(allvms)
+		#centos_keygen(allvms)
+		#centos_keyshare(allvms)
+		#centos_cfg_storage(allvms)
+		centos_install_reflex(allvms)
+		centos_setupClusters(allvms)
+		#centos_setupHDFS(allvms)
+		hdfs_report = centos_checkHDFS(allvms)
 
-		
 	if opt_colsanity or opt_colsanity_only :
 		checkColSanity(allvms)
 		attachment = collector_results()

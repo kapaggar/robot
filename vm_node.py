@@ -127,6 +127,44 @@ class vm_node(object):
 		time.sleep(5)
 		output += self._ssh_session.executeShell('multipath')
 		return output
+	
+	def centos_validate_HDFS(self):
+		if self.is_clusternode() and not self.is_clustermaster():
+			return "Part of Cluster but not master. skipping node %s" % self._name
+		output = ''
+		report = ''
+		retry = 0
+		validate_status = False
+		while retry <= 15:
+			try:
+				res_man = self.is_ResManUp()
+				if res_man :
+					message ("Resource Manager is up in %s" % self._name, {'style':'ok'} )
+					res_manStart = get_startProcess(res_man)
+					message ("Resource Manager is running since %s seconds" % res_manStart, {'style':'info'})
+					if ( res_manStart < 300):
+						time2wait = 300 - res_manStart
+						message ("Waiting for %s seconds before running hdfs report" % time2wait, {'style':'info'})
+						time.sleep(time2wait)
+					output += self.info_yarn_Setup()
+					validate_status = True
+					break
+				else:
+					retry += 1
+					message ("Attempt %s. Resource Manager is not running. Waiting total 15 min" % retry, {'style':'WARNING'})
+					time.sleep(60)
+			except Exception:
+				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
+				return False
+		
+		message ("Now HDFS config report", {'style':'INFO'})
+		report += str(self.hdfs_report())
+		if report.find('ERROR') != -1 :
+			message ("HDFS Report = %s" % report ,{'style':'NOK'} )
+		else :
+			message ("HDFS Report = %s" % report ,{'style':'OK'} )
+		output += report 
+		return output
 
 	def centos_cfg_ntp(self):
 		output = ''
@@ -227,12 +265,12 @@ UserKnownHostsFile /dev/null
 		output = ''
 		response = ''
 		output 	+= self._ssh_session.executeShell('yum clean all' )
-		response = self._ssh_session.executeShell('yum install -y wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted' )
+		response = self._ssh_session.executeShell('yum install -y wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz' )
 		output += response[-80:]
 		# I dont like to hardcode these packages location, but thats how it is now.
-		response = self._ssh_session.executeShell('yum install -y http://kite.ggn.in.guavus.com/users/kapil/RPM/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
+		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
 		output += response[-80:]
-		response = self._ssh_session.executeShell('yum install -y http://kite.ggn.in.guavus.com/users/kapil/RPM/virtual-java-1.8-31.noarch.rpm' )
+		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/virtual-java-1.8-31.noarch.rpm' )
 		output += response[-80:]
 		return output
 	
@@ -246,7 +284,7 @@ UserKnownHostsFile /dev/null
 			uuid 			= self._ssh_session.executeShell('blkid %s |grep -o \'[A-Za-z0-9-]\\{36\\}\' ' %(dm_partition)).splitlines()[-1]
 			mapper_device 	= self._ssh_session.executeShell('findfs UUID=%s ' %(uuid)).splitlines()[-1]
 #			output 			+= self._ssh_session.executeShell('sed -i -e \'s#^%s.*$#%s %s _netdev 0 0#\' /etc/fstab' %(mapper_device, mapper_device, mount_point))
-			output 			+= self._ssh_session.executeShell('echo \"%s %s _netdev ext3 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
+			output 			+= self._ssh_session.executeShell('echo \"%s %s ext3 _netdev 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
 			output			+= self._ssh_session.executeShell('mount -av')
 			output			+= self._ssh_session.executeShell('restorecon -R %s '	% (mount_point))
 		return output
@@ -261,7 +299,81 @@ UserKnownHostsFile /dev/null
 		for vm in self.nodes_ip.keys():
 #			output += self._ssh_session.executeShell('sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts' %(self.nodes_ip[vm],self.nodes_ip[vm],vm))
 			output += self._ssh_session.executeShell('echo \"%s %s\" >> /etc/hosts' %(self.nodes_ip[vm],vm))
+		return output
 
+	def centos_install_reflex(self):
+		output = ''
+		response = ''
+		reflex_package_list ='reflex-tm reflex-tps '
+		if self.is_namenode():
+			reflex_package_list +=' reflex-collector'
+		output 	+= self._ssh_session.executeShell('yum clean all ')
+		response = self._ssh_session.executeShell('yum install -y %s ' %(reflex_package_list))
+		output += response[-80:]
+		return output
+	
+	def centos_setclustering(self):
+		output = ''
+		cmd = ''
+		if not self.is_clusternode():
+			message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			return False # TODO Raise exception
+		if not self._cluster_name:
+			self._cluster_name = self._set_clusterName()
+
+		cmd += 'cluster id %s \n' % (self._cluster_name)
+		cmd += 'cluster master address vip %s /%s \n' %(self._clusterVIP,self._mask)
+		cmd += 'cluster name %s \n' % (self._cluster_name)
+		cmd += 'cluster enable \n\n'
+		cmd += 'EOF\n'
+		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF %s' %(cmd))
+		return output
+
+	def centos_setup_HDFS(self):
+		HA =''
+		journal_nodes = ''
+		output = ''
+		client_ip = None 
+		cmd = "no register hadoop_yarn\n"
+		cmd += "register hadoop_yarn\n"
+		
+		if self.is_clusternode():
+			HA = 'True'
+			client_ip = self._clusterVIP
+		else:
+			HA = 'False'
+			client_ip = self.nodes_ip[self.name_nodes[0]]
+			
+		cmd += "set hadoop_yarn config_ha %s \n" % HA
+		cmd += "set hadoop_yarn namenode1 %s \n" % self.name_nodes[0]
+		
+		if self.is_clusternode():
+			cmd += "set hadoop_yarn namenode2 %s \n" % self.name_nodes[1]
+			cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
+			for node in self.journal_nodes:
+				cmd += "set hadoop_yarn journalnodes %s \n" % node
+			for node in self.name_nodes:
+				cmd += "set hadoop_yarn journalnodes %s \n" % node
+
+		for node in self.journal_nodes:
+			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+		for node in self.data_nodes:
+			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+
+		cmd += "set hadoop_yarn client %s \n" % client_ip
+		cmd += "set hadoop_yarn state UNINIT \n"
+		
+		if os.environ['BACKUP_HDFS'] :
+			cmd += "register backup_hdfs \n"
+			cmd += "set backup_hdfs namenode UNINIT \n"
+			cmd += "set backup_hdfs version HADOOP_YARN \n"
+			cmd += "EOF"
+			
+		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF %s \" '% (cmd))
+		cmd     = 'pm process tps restart \n'
+		cmd 	+= "EOF"
+		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF %s\"' %(cmd))
+		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 	
 	def clone_volume(self):

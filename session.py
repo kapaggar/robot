@@ -247,7 +247,10 @@ class session(object):
 		while timeOut > 0:
 			self.write("")
 			buff = self.read()
-			lines = buff.splitlines()
+			if buff is not None:
+				lines = buff.splitlines()
+			else:
+				continue
 			if len(lines) > 0:
 				buff = lines[-1]
 				if buff and not buff.isspace():   # the string is non-empty
