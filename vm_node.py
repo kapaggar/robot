@@ -304,7 +304,7 @@ UserKnownHostsFile /dev/null
 	def centos_install_reflex(self):
 		output = ''
 		response = ''
-		reflex_package_list ='reflex-tm reflex-tps '
+		reflex_package_list ='reflex-tm reflex-tps hadoop'
 		if self.is_namenode():
 			reflex_package_list +=' reflex-collector'
 		output 	+= self._ssh_session.executeShell('yum clean all ')
@@ -326,7 +326,7 @@ UserKnownHostsFile /dev/null
 		cmd += 'cluster name %s \n' % (self._cluster_name)
 		cmd += 'cluster enable \n\n'
 		cmd += 'EOF\n'
-		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF %s' %(cmd))
+		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
 		return output
 
 	def centos_setup_HDFS(self):
@@ -366,13 +366,12 @@ UserKnownHostsFile /dev/null
 		if os.environ['BACKUP_HDFS'] :
 			cmd += "register backup_hdfs \n"
 			cmd += "set backup_hdfs namenode UNINIT \n"
-			cmd += "set backup_hdfs version HADOOP_YARN \n"
-			cmd += "EOF"
-			
-		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF %s \" '% (cmd))
+			cmd += "set backup_hdfs version HADOOP_YARN \n\n"
+			cmd += "EOF\n"
+		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF\n%s\" '% (cmd))
 		cmd     = 'pm process tps restart \n'
 		cmd 	+= "EOF"
-		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF %s\"' %(cmd))
+		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
 		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		return output
 	
@@ -586,8 +585,11 @@ UserKnownHostsFile /dev/null
 
 	def get_psef(self):
 		output = ''
-		output += self._ssh_session.executeCli("cli session terminal width 999")
-		output += self._ssh_session.executeCli('_exec /bin/ps -eo etime,args')
+		if os.environ['RPM_MODE'] :
+			output += self._ssh_session.executeShell('ps -eo etime,args')
+		else:
+			output += self._ssh_session.executeCli("cli session terminal width 999")
+			output += self._ssh_session.executeCli('_exec /bin/ps -eo etime,args')
 		return output
 
 	def hostid_generator(self):
@@ -624,7 +626,10 @@ UserKnownHostsFile /dev/null
 
 	def is_clustermaster(self):
 		output = ''
-		output += self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/master')
+		if os.environ['RPM_MODE'] :
+			output += self._ssh_session.executeShell('su - reflex -c \"mdreq -v query get - /cluster/state/local/master\"')
+		else:
+			output += self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/master')
 		if output.find("true") != -1:
 			return True
 		else:

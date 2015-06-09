@@ -633,13 +633,13 @@ if __name__ == '__main__':
 		message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
 	
 	if opt_rpm:
-		#centos_basic_settings(allvms)
-		#centos_keygen(allvms)
-		#centos_keyshare(allvms)
-		#centos_cfg_storage(allvms)
+		centos_basic_settings(allvms)
+		centos_keygen(allvms)
+		centos_keyshare(allvms)
+		centos_cfg_storage(allvms)
 		centos_install_reflex(allvms)
 		centos_setupClusters(allvms)
-		#centos_setupHDFS(allvms)
+		centos_setupHDFS(allvms)
 		hdfs_report = centos_checkHDFS(allvms)
 
 	if opt_colsanity or opt_colsanity_only :
