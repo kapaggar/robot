@@ -231,6 +231,7 @@ keys /etc/ntp/keys
 	def centos_get_repo(self):
 		output = ''
 		output += self._ssh_session.executeShell('curl %s -o /etc/yum.repos.d/CentOS-Base.repo' % (self._centos_repo_path))
+		output += self._ssh_session.executeShell('yum clean all')
 		return output
 	
 	def centos_distkeys(self,user):
@@ -251,11 +252,16 @@ UserKnownHostsFile /dev/null
 			if username != user:
 				continue
 			output += self._ssh_session.executeShell('echo \"%s\" >> ~%s/.ssh/authorized_keys ' %(pubkey,user))
+		output += self._ssh_session.executeShell('chown -R %s:%s ~%s/.ssh ' %(user,user,user))
+		output += self._ssh_session.executeShell('restorecon -R ~%s/.ssh ' %(user))
 		return output
 		
 	def centos_genkeys(self,user):
 		output = ''
+		output += self._ssh_session.executeShell('mkdir -p ~%s/.ssh/' %(user))
 		output += self._ssh_session.executeShell('yes | ssh-keygen -q -t dsa -N \"\" -f ~%s/.ssh/id_dsa;echo' %(user))
+		output += self._ssh_session.executeShell('chown -R %s:%s ~%s/.ssh ' %(user,user,user))
+		output += self._ssh_session.executeShell('restorecon -R ~%s/.ssh ' %(user))
 		self._dsakey = self._ssh_session.executeShell('cat ~%s/.ssh/id_dsa.pub ' %(user))
 		tuples = user + ":" + self._dsakey
 		self.pub_keys.append(tuples)
@@ -268,9 +274,9 @@ UserKnownHostsFile /dev/null
 		response = self._ssh_session.executeShell('yum install -y wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz' )
 		output += response[-80:]
 		# I dont like to hardcode these packages location, but thats how it is now.
-		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
+		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
 		output += response[-80:]
-		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/virtual-java-1.8-31.noarch.rpm' )
+		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/virtual-java-1.8-31.noarch.rpm' )
 		output += response[-80:]
 		return output
 	
@@ -325,7 +331,7 @@ UserKnownHostsFile /dev/null
 		cmd += 'cluster master address vip %s /%s \n' %(self._clusterVIP,self._mask)
 		cmd += 'cluster name %s \n' % (self._cluster_name)
 		cmd += 'cluster enable \n\n'
-		cmd += 'EOF\n'
+		cmd += 'EOF\n\n\n\n'
 		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
 		return output
 
@@ -365,8 +371,7 @@ UserKnownHostsFile /dev/null
 		
 		if os.environ['BACKUP_HDFS'] :
 			cmd += "register backup_hdfs \n"
-			cmd += "set backup_hdfs namenode UNINIT \n"
-			cmd += "set backup_hdfs version HADOOP_YARN \n\n"
+			cmd += "set backup_hdfs namenode UNINIT \n\n"
 			cmd += "EOF\n"
 		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF\n%s\" '% (cmd))
 		cmd     = 'pm process tps restart \n'

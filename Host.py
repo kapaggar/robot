@@ -19,7 +19,6 @@ class Host(object):
 		self._iso_path			= self.config['HOSTS']['iso_path']
 		self._release_ver		= self.config['HOSTS']['release_ver']
 		self._centos_template	= self.config['HOSTS']['centos_template_path']
-		self._centos_template_file= self.config['HOSTS'][self._name ]['centos_template_file']
 		self._template_file		= self.config['HOSTS'][self._name ]['template_file']
 		self._ip				= self.config['HOSTS'][self._name ]['ip']
 		self._username			= self.config['HOSTS'][self._name ]['username']
@@ -125,7 +124,7 @@ class Host(object):
 		message ("CentOS template to fetch = %s" % centos_template_path,{'style':'INFO'})
 		try :
 			response =  self._ssh_session.executeCli('virt volume fetch url %s' % centos_template_path,wait=2 )
-			output += self._ssh_session.executeCli('_exec tar -C /data/virt/pools/default/ -xf /data/virt/pools/default/template.tgz' )
+			output += self._ssh_session.executeCli('_exec tar -C /data/virt/pools/default/ -xf /data/virt/pools/default/%s' %( self._centos_template.split("/")[-1] ) )
 			if "failed" in response:
 				message ("Cannot fetch url %s on host %s"% (centos_template_path,self.getname()),{'style':'NOK'})
 				message ("Reason %s" % response,{'style':'DEBUG'})
@@ -195,7 +194,7 @@ class Host(object):
 
 	def is_centos_template_present(self):
 		output = ''
-		output +=  self._ssh_session.executeCli('_exec ls -l %s' % self._centos_template_file)
+		output +=  self._ssh_session.executeCli('_exec ls -l /data/virt/pools/default/%s' % (self._centos_template.split("/")[-1] ))
 		if output.find("No such file or directory") != -1:
 			return False
 		else :

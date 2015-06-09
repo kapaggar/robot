@@ -47,8 +47,8 @@ def centos_basic_settings(tuples):
 			message ( "Centos RotateLog_Output = %s " %vm.centos_rotate_logs()				, {'style': 'INFO'} )
 			if opt_reconfig:
 				message ( "Centos Factory-Revert_Output = %s " %vm.centos_factory_revert()	, {'style': 'INFO'} )
-			message ( "Centos Install basic packages = %s " %vm.centos_install_base()		, {'style': 'INFO'} )
 			message ( "Centos get Base repo = %s " 			%vm.centos_get_repo()			, {'style': 'INFO'} )
+			message ( "Centos Install basic packages = %s " %vm.centos_install_base()		, {'style': 'INFO'} )
 			message ( "Centos Configure ntp  = %s " 		%vm.centos_cfg_ntp()			, {'style': 'INFO'} )
 			message ( "Centos Hostname maps Output = %s "	%vm.centos_setIpHostMaps()		, {'style': 'INFO'} )
 		else:
@@ -92,12 +92,11 @@ def centos_install_reflex(tuples):
 		host,vm_name = line.split(":")
 		message ( "Now installing reflex components via yum inside VM %s" % vm_name,{'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.is_namenode():
-			if vm.ssh_self():
-				message ("Centos yum reflex install  = [%s]" % vm.centos_install_reflex(),{'style': 'INFO'} )
-			else:
-				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-				terminate_self("Exiting")
+		if vm.ssh_self():
+			message ("Centos yum reflex install  = [%s]" % vm.centos_install_reflex(),{'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			terminate_self("Exiting")
 	return "Success"
 
 def centos_keygen(tuples):
@@ -117,6 +116,28 @@ def centos_keyshare(tuples):
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			message ( "Centos distribute keys = %s " %vm.centos_distkeys('root')		, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_reflex_keygen(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "Centos distribute keys for reflex = %s " %vm.centos_genkeys('reflex')		, {'style': 'INFO'} )
+		else:
+			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			terminate_self("Exiting")
+	return "Success"
+
+def centos_reflex_keyshare(tuples):
+	for line in tuples:
+		host,vm_name = line.split(":")
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.ssh_self():
+			message ( "Centos distribute keys for reflex = %s " %vm.centos_distkeys('reflex')		, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -621,16 +642,6 @@ if __name__ == '__main__':
 			setupHDFS(allvms)
 			hdfs_report = checkHDFS(allvms)
 			config_collector(allvms)
-			
-		if opt_email:
-			message ('Sending out emails: ' ,{'style' : 'info'})
-			attachment = collect_results()
-			notify_email(config,hdfs_report,attachment)
-			clean_results(attachment)
-		else :
-			message ('Not sending out emails' ,{'style' : 'info'})
-		manuf_runtime = time.time() - start_time
-		message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
 	
 	if opt_rpm:
 		centos_basic_settings(allvms)
@@ -638,10 +649,22 @@ if __name__ == '__main__':
 		centos_keyshare(allvms)
 		centos_cfg_storage(allvms)
 		centos_install_reflex(allvms)
+		centos_reflex_keygen(allvms)
+		centos_reflex_keyshare(allvms)
 		centos_setupClusters(allvms)
 		centos_setupHDFS(allvms)
 		hdfs_report = centos_checkHDFS(allvms)
 
+	if opt_email:
+		message ('Sending out emails: ' ,{'style' : 'info'})
+		attachment = collect_results()
+		notify_email(config,hdfs_report,attachment)
+		clean_results(attachment)
+	else :
+		message ('Not sending out emails' ,{'style' : 'info'})
+	manuf_runtime = time.time() - start_time
+	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
+		
 	if opt_colsanity or opt_colsanity_only :
 		checkColSanity(allvms)
 		attachment = collector_results()

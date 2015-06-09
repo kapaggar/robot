@@ -2,7 +2,7 @@
 iso_path = string(default=nightly)
 upgrade_img = string(default=None)
 nightly_dir = string(default=http://kite.ggn.in.guavus.com/snoopy/work/platform-master/output/product-guavus-x86_64/release/mfgcd)
-centos_template_path = string(default=http://192.168.104.78/users/kapil/RPM/template.tgz)
+centos_template_path = string(default=http://192.168.104.78/users/kapil/RPM/template-6.5.tgz)
 centos_repo_path = string(default=http://192.168.104.78/users/kapil/RPM/CentOS-Base.repo)
 name_server = ip_addr(default = 103.14.2.35)
 release_ver = string(default = nightly)
@@ -20,7 +20,6 @@ password = string(default=admin@123)
 brMgmt = string(default = mgmt)
 brStor = string(default = stor)
 template_file = string(default = /data/virt/pools/default/template.img )
-centos_template_file = string(default = /data/virt/pools/default/template.tgz )
 
 [[[__many__]]]
 mgmt_ip = ip_addr
