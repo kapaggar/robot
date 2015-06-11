@@ -483,7 +483,7 @@ if __name__ == '__main__':
 						metavar='LOGFILE',
 						nargs=1,
 						type=str,
-						help='Custom logfile name. Default is script.TimeStamp.log ( Does NOT redirects stdout )')
+						help='Custom logfile name. Default is <ScriptName.Time.log>')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',

@@ -310,11 +310,16 @@ UserKnownHostsFile /dev/null
 	def centos_install_reflex(self):
 		output = ''
 		response = ''
-		reflex_package_list ='reflex-tm reflex-tps hadoop'
+		reflex_package_list = []
+		reflex_package_list.append('reflex-tm')
+		reflex_package_list.append('reflex-common')
+		reflex_package_list.append('reflex-tps')
+		reflex_package_list.append('hadoop')
 		if self.is_namenode():
-			reflex_package_list +=' reflex-collector'
+			reflex_package_list.append('reflex-collector')
 		output 	+= self._ssh_session.executeShell('yum clean all ')
-		response = self._ssh_session.executeShell('yum install -y %s ' %(reflex_package_list))
+		for reflex_pkg in reflex_package_list:
+			response = self._ssh_session.executeShell('yum install -y %s ' %(reflex_pkg))
 		output += response[-80:]
 		return output
 	
@@ -327,11 +332,11 @@ UserKnownHostsFile /dev/null
 		if not self._cluster_name:
 			self._cluster_name = self._set_clusterName()
 
-		cmd += 'cluster id %s \n' % (self._cluster_name)
-		cmd += 'cluster master address vip %s /%s \n' %(self._clusterVIP,self._mask)
-		cmd += 'cluster name %s \n' % (self._cluster_name)
-		cmd += 'cluster enable \n\n'
-		cmd += 'EOF\n\n\n\n'
+		cmd += "cluster id %s\n" % (self._cluster_name)
+		cmd += "cluster master address vip %s /%s\n" %(self._clusterVIP,self._mask)
+		cmd += "cluster name %s\n" % (self._cluster_name)
+		cmd += "cluster enable\n"
+		cmd += "EOF"
 		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
 		return output
 
@@ -371,7 +376,6 @@ UserKnownHostsFile /dev/null
 		
 		if os.environ['BACKUP_HDFS'] :
 			cmd += "register backup_hdfs \n"
-			cmd += "set backup_hdfs namenode UNINIT \n\n"
 			cmd += "EOF\n"
 		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF\n%s\" '% (cmd))
 		cmd     = 'pm process tps restart \n'

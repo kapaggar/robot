@@ -295,7 +295,7 @@ def notify_email(config,msg,attachment=None):
 
 def sprintf_timestamped(string):
     timestamped_string = ''
-    strings = map(str.strip, string.split('\n'))
+    strings = map(str.strip, string.encode('ascii','ignore').split('\n'))
     for line in strings:
         timestamped_string += time.strftime("%b %e %H:%M:%S ") + str(line) + " \n"
     return timestamped_string
