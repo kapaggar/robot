@@ -118,46 +118,46 @@ class session(object):
 		self.session.close()
 		message ( "Session closed for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 
-	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1):
+	def executeCli(self,cmd,prompt=re_cliPrompt,wait=1,timeout=60):
 		output = ''
 		prompt = self.getPrompt()
 		message ( "executeCli| prompt=> %s| cmd=> %s| host=> %s|" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
-			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait)
+			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
 			return output
 		elif prompt == "shell":
 			self.run_till_prompt("cli -m config",self.re_cliPrompt,wait=1)
-			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait)
+			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
 			return output
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit",self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
 			return output
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
 			return output
 		elif prompt == "en":
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
 			return output
 		#Todo Raise exception"
 		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'}) 
 
-	def executePmx(self,cmd):
+	def executePmx(self,cmd,wait=1,timeout=60):
 		output = ''
 		prompt = self.getPrompt()
 		message ( "In executePmx prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
 			return output
 		elif prompt == "shell":
 			output = self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("exit", self.re_shellPrompt,wait=1)
 			return output
 		elif prompt == "pmx":
@@ -167,24 +167,52 @@ class session(object):
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
-			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
 			return output
 
-	def executeShell(self,cmd):
+	def executeShell(self,cmd,wait=1,timeout=300):
 		output = ''
 		prompt = self.getPrompt()
 		message ( "In executeShell prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
+			output += self.run_till_prompt("_shell", self.re_shellPrompt)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
+			return output
+		elif prompt == "shell":
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
+			return output
+		elif prompt == "pmx":
+			output += self.run_till_prompt("quit", self.re_cliPrompt)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
+			return output
+		elif prompt == "login":
+			output += self.run_till_prompt("en", self.re_enPrompt)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
+			return output
+
+	def executeShellasUser(self,user,cmd):
+		# su - reflex -c "cli -m config <<< 'conf wr'"  
+		output = ''
+		prompt = self.getPrompt()
+		message ( "In executexecuteShellasUser prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+		if prompt == "cli":
 			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt('su - %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait=1,timeout=5)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
 		elif prompt == "shell":
-			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt('runuser -l %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait=1,timeout=5)
 			return output
 		elif prompt == "pmx":
-			output = self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
+			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output = self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
 			return output
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
@@ -192,7 +220,34 @@ class session(object):
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
-
+		
+	def executeCliasUser(self,user,cmd):
+		# su - reflex -c "cli -m config <<< 'conf wr'"  
+		output = ''
+		prompt = self.getPrompt()
+		message ( "In executexecuteCliasUser prompt = %s cmd = %s host = %s" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+		if prompt == "cli":
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt('su - %s -c \"cli -m config <<< \'%s\'\" '% (user,cmd), self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
+			return output
+		elif prompt == "shell":
+			output += self.run_till_prompt('runuser -l %s -c \"cli -m config <<< \'%s\'\" '% (user,cmd), self.re_shellPrompt,wait=1,timeout=5)
+			return output
+		elif prompt == "pmx":
+			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output = self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			return output
+		elif prompt == "login":
+			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
+			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
+			return output
+		
+		
 	def getLoginPrompt(self,line):
 		try:
 			m1 = re.search("^(?P<loginPrompt>\S+(\s+\[\S+:\s+\S+\])?\s+>)\s*",line.strip(),re.MULTILINE)
@@ -268,42 +323,57 @@ class session(object):
 			message ( "Unable to reach a Prompt in getPrompt", {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
-	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1):
-		cmds = self._cmd_fix_input_data(cmd)
-		for lines in cmds:
-			 self.write(lines)
-			 time.sleep(0.5)
-		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
-		
+	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1,timeout=300):
 		data = ''
 		output = ''
 		lastline = ''
+		cmds = self._cmd_fix_input_data(cmd)
+		
+		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
+
+		for lines in cmds:
+			 self.write(lines)
+			 time.sleep(0.5)
+
 		while True :
-			data =  self.chan.recv(4096)
-			data = data.replace('\r', '')
-			if not output:
-					 data = data.replace('.*\n'  ,'')
-					 data = data.replace(cmd  ,'')
-					 output += data
-			else:
-					 output += data
-			#debug
-			lines =  data.splitlines()
-			if len(lines) > 0 :
-				lastline = lines[-1]
-				#message ( "debug long running cmd progress at =>\"%s\" on %s" % (lastline,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
-			else:
-				message ( "Client Disconnected.. reboot ?",{'to_stdout':1, 'to_log':1 , 'style': 'NOK'}) 
-				return False #May be shell exited abruptly 
-			if isinstance(prompt,re._pattern_type):
-				if prompt.match(lastline):
-					output = re.sub(prompt,'',output)
+			TimeOut = timeout
+			Channel_Ready = False
+			while TimeOut > 0 :
+				if self.chan.recv_ready() :
+					Channel_Ready = True
 					break
-			else:
-				if prompt in lastline:
-					break
-					if not self.chan.recv_ready():	   
-						time.sleep(wait)
+				else :
+					time.sleep(wait)
+					TimeOut = TimeOut - wait
+					
+			if Channel_Ready :
+				data =  self.chan.recv(4096)
+				data = data.replace('\r', '')
+				if not output:
+						 data = data.replace('.*\n'  ,'')
+						 data = data.replace(cmd  ,'')
+						 output += data
+				else:
+						 output += data
+				#debug
+				lines =  data.splitlines()
+				if len(lines) > 0 :
+					lastline = lines[-1]
+					#message ( "debug long running cmd progress at =>\"%s\" on %s" % (lastline,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				else:
+					message ( "Client Disconnected.. reboot ?",{'to_stdout':1, 'to_log':1 , 'style': 'NOK'}) 
+					return False #May be shell exited abruptly 
+				if isinstance(prompt,re._pattern_type):
+					if prompt.match(lastline):
+						output = re.sub(prompt,'',output)
+						message ( "Ran Successfully \"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
+						break
+				else:
+					if prompt in lastline:
+						break
+			else :
+				message ( "Prompt not responding, sending newline char",{'to_stdout':1, 'to_log':1 , 'style': 'TRACE'}) 	
+				self.write("")
 		output.lstrip()
 		return output
 
@@ -313,7 +383,7 @@ class session(object):
 		timeOut = 120
 		while timeOut > 0 :
 			if self.chan.recv_ready():
-				data = unicode(self.chan.recv(4096), errors='replace')
+				data = unicode(self.chan.recv(4096), errors='ignore')
 				got_data = True
 				break
 			else:
@@ -329,7 +399,7 @@ class session(object):
 	def read_all(self):
 		data = ""
 		while self.chan.recv_ready():
-			data += unicode(self.chan.recv(4096), errors='replace')
+			data += unicode(self.chan.recv(4096), errors='ignore')
 		return data
 
 	def tellPrompt(self,line):

@@ -41,6 +41,7 @@ class Host(object):
 	
 	def create_template(self):
 		output = ''
+		manufacture_cmd = '/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda'
 		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
 		message ( "Making template from iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
@@ -54,9 +55,9 @@ class Host(object):
 			output +=  self._ssh_session.run_till_prompt('virt vm template install cdrom file %s disk-overwrite connect-console text timeout 60' % iso_name , "(none) login:",wait=30)
 			output +=  self._ssh_session.run_till_prompt('root', "#",wait=1)
 			output +=  self._ssh_session.run_till_prompt('PS1="my_PROMPT"', "my_PROMPT",wait=1)
-			message ( "Invoking manufacture.sh inside vm-node as '/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda'" ,{ 'style': 'OK'}  )
+			message ( "Invoking manufacture.sh inside vm-node as %s"%(manufacture_cmd) ,{ 'style': 'OK'}  )
 			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=8192/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
-			output +=  self._ssh_session.run_till_prompt('/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda',"my_PROMPT",wait=60)
+			output +=  self._ssh_session.run_till_prompt(manufacture_cmd,"my_PROMPT",wait=60)
 			output +=  self._ssh_session.run_till_prompt('reboot')
 		except Exception:
 			message ( "Template creation failed  %s " % self._name,{'style': 'FATAL'}  )
@@ -140,8 +141,14 @@ class Host(object):
 		output = ''
 		response = ''
 		iso_path = self.get_iso_path()
+		iso_name = basename(iso_path)
 		message ("iso to fetch = %s" % iso_path,{'style':'INFO'})
 		try :
+			message ("Killing existing fetch command %s ( if hung/running previously )" %(iso_name),{'style':'INFO'})
+			output +=  self._ssh_session.executeCli('_exec pkill curl',wait=2 )
+			message ("Removing older version of %s ( if present )" %(iso_name),{'style':'INFO'})
+			output +=  self._ssh_session.executeCli('no virt volume file %s' %(iso_name),wait=2 )
+			message ("Fetching latest version of %s " %(iso_name),{'style':'INFO'})
 			response =  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
 			if "failed" in response:
 				message ("Unable to fetch url %s on host %s"% (iso_path,self.getname()),{'style':'NOK'})

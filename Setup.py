@@ -81,7 +81,7 @@ def centos_checkHDFS(tuples):
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.centos_validate_HDFS()
-				message ("Centos Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+				message ("Centos Check-HDFS_Output in %s = [%s]" % (vm_name,response)							,{'style': 'INFO'} )
 				output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
@@ -93,7 +93,7 @@ def centos_install_reflex(tuples):
 		message ( "Now installing reflex components via yum inside VM %s" % vm_name,{'style': 'INFO'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ("Centos yum reflex install  = [%s]" % vm.centos_install_reflex(),{'style': 'INFO'} )
+			message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())			,{'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -104,7 +104,7 @@ def centos_keygen(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos generate keys = %s " %vm.centos_genkeys('root')			, {'style': 'INFO'} )
+			message ( "Centos generate keys for root in %s = %s " %(vm_name, vm.centos_genkeys('root'))			, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -115,7 +115,7 @@ def centos_keyshare(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos distribute keys = %s " %vm.centos_distkeys('root')		, {'style': 'INFO'} )
+			message ( "Centos distribute keys for root in %s = %s " %(vm_name,vm.centos_distkeys('root'))		, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -126,7 +126,7 @@ def centos_reflex_keygen(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos distribute keys for reflex = %s " %vm.centos_genkeys('reflex')		, {'style': 'INFO'} )
+			message ( "Centos distribute keys for reflex in %s = %s " %(vm_name,vm.centos_genkeys('reflex'))	, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -137,7 +137,7 @@ def centos_reflex_keyshare(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos distribute keys for reflex = %s " %vm.centos_distkeys('reflex')		, {'style': 'INFO'} )
+			message ( "Centos distribute keys for reflex in %s = %s " %(vm_name,vm.centos_distkeys('reflex'))		, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -165,7 +165,6 @@ def centos_setupClusters(tuples):
 			if vm.is_clusternode():
 				message ( "Centos Setup Cluster_Output = %s " % vm.centos_setclustering()			, {'style': 'INFO'} )
 				time.sleep(5) # Let clustering settle down			else:
-				message ( "nothing to do in %s" %vm_name				, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")	

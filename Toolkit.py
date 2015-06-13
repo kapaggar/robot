@@ -1,5 +1,6 @@
 import re
 import os, sys
+import unicodedata
 import time
 import signal
 import tarfile
@@ -293,12 +294,17 @@ def notify_email(config,msg,attachment=None):
 		notify.addAttachment(attachment)
 	notify.send()
 
-def sprintf_timestamped(string):
-    timestamped_string = ''
-    strings = map(str.strip, string.encode('ascii','ignore').split('\n'))
-    for line in strings:
-        timestamped_string += time.strftime("%b %e %H:%M:%S ") + str(line) + " \n"
-    return timestamped_string
+def sprintf_timestamped(message):
+	timestamped_string = ''
+	if isinstance(message, str):
+		strings = map(str.strip, message.split('\n'))
+	elif isinstance(message, unicode):
+		strings = map(str.strip, unicodedata.normalize('NFKD', message).encode('ascii','ignore').split('\n'))
+	else:
+		strings = "<NON STRING - NON UNICODE - LOG"
+	for line in strings:
+		timestamped_string += time.strftime("%b %e %H:%M:%S ") + str(line) + " \n"
+	return timestamped_string
 
 def sprintf_ok():
     return Fore.WHITE +	Back.GREEN +	Style.BRIGHT +	"OK" + Fore.RESET + Back.RESET + Style.RESET_ALL 		+ " : "

@@ -115,11 +115,17 @@ class vm_node(object):
 	
 	def centos_bring_storage(self):
 		output = ''
+		response = ''
 		output += self._ssh_session.executeShell('echo \"InitiatorName=%s\" > /etc/iscsi/initiatorname.iscsi ' %self._initiatorname_iscsi)
 		output += self._ssh_session.executeShell('service iscsi stop;echo')
 		output += self._ssh_session.executeShell('service iscsid restart;echo')
 		time.sleep(5)
-		output += self._ssh_session.executeShell('iscsiadm -m discovery -t st -p %s' % self._iscsi_target)
+		response = self._ssh_session.executeShell('iscsiadm -m discovery -t st -p %s' % self._iscsi_target)
+		if response.find("Could not perform SendTargets discovery") != -1:
+			message ( "Raise Exception.Could not perform SendTargets discovery in %s" %(self._name), {'style': 'FATAL'} )
+			raise Exception("Could not perform SendTargets discovery in %s" %(self._name))
+			return "Failure storage config in %s" %(self._name)
+
 		output += self._ssh_session.executeShell('service iscsi restart')
 		output += self._ssh_session.executeShell('chkconfig iscsi on')
 		time.sleep(15)
@@ -270,11 +276,15 @@ UserKnownHostsFile /dev/null
 	def centos_install_base(self):
 		output = ''
 		response = ''
+		base_pkgs = "wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof"
 		output 	+= self._ssh_session.executeShell('yum clean all' )
-		response = self._ssh_session.executeShell('yum install -y wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz' )
+		message ( "Installing pkgs [%s] in %s " % ( base_pkgs, self._name) ,{'to_trace': '1' ,'style': 'TRACE'}  )
+		response = self._ssh_session.executeShell('yum install -y %s'%(base_pkgs) )
 		output += response[-80:]
-		# I dont like to hardcode these packages location, but thats how it is now.
+		# I dont like hardcoding these packages location, but thats how it is now.
+		message ( "Installing pkg jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm in %s " % ( self._name) ,{'to_log': '1' ,'style': 'INFO'}  )
 		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
+		message ( "Installing pkg virtual-java-1.8-31.noarch.rpm in %s " % ( self._name) ,{'to_log': '1' ,'style': 'INFO'}  )
 		output += response[-80:]
 		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/virtual-java-1.8-31.noarch.rpm' )
 		output += response[-80:]
@@ -289,9 +299,12 @@ UserKnownHostsFile /dev/null
 			dm_partition 	= self._ssh_session.executeShell('readlink -f /dev/disk/by-id/dm-uuid-part1-mpath-%s' 	% (wwid)).splitlines()[-1]
 			uuid 			= self._ssh_session.executeShell('blkid %s |grep -o \'[A-Za-z0-9-]\\{36\\}\' ' %(dm_partition)).splitlines()[-1]
 			mapper_device 	= self._ssh_session.executeShell('findfs UUID=%s ' %(uuid)).splitlines()[-1]
+			if mapper_device.find("unable to resolve") != -1 :
+				message ( "Cannot Resolve UUID for wwid=%s. Check if partition is present." %(wwid) , {'style': 'FATAL'} )
+				return "Failure setting up mount-points"
 #			output 			+= self._ssh_session.executeShell('sed -i -e \'s#^%s.*$#%s %s _netdev 0 0#\' /etc/fstab' %(mapper_device, mapper_device, mount_point))
 			output 			+= self._ssh_session.executeShell('echo \"%s %s ext3 _netdev 0 0\" >> /etc/fstab' % (mapper_device, mount_point))
-			output			+= self._ssh_session.executeShell('mount -av')
+			output			+= self._ssh_session.executeShell('mount -av -O _netdev')
 			output			+= self._ssh_session.executeShell('restorecon -R %s '	% (mount_point))
 		return output
 	
@@ -331,13 +344,10 @@ UserKnownHostsFile /dev/null
 			return False # TODO Raise exception
 		if not self._cluster_name:
 			self._cluster_name = self._set_clusterName()
-
-		cmd += "cluster id %s\n" % (self._cluster_name)
-		cmd += "cluster master address vip %s /%s\n" %(self._clusterVIP,self._mask)
-		cmd += "cluster name %s\n" % (self._cluster_name)
-		cmd += "cluster enable\n"
-		cmd += "EOF"
-		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
+		output += self._ssh_session.executeCliasUser('reflex',"cluster id %s" % (self._cluster_name))
+		output += self._ssh_session.executeCliasUser('reflex',"cluster master address vip %s /%s" %(self._clusterVIP,self._mask))
+		output += self._ssh_session.executeCliasUser('reflex',"cluster name %s" % (self._cluster_name))
+		output += self._ssh_session.executeCliasUser('reflex',"cluster enable")
 		return output
 
 	def centos_setup_HDFS(self):
@@ -374,14 +384,16 @@ UserKnownHostsFile /dev/null
 		cmd += "set hadoop_yarn client %s \n" % client_ip
 		cmd += "set hadoop_yarn state UNINIT \n"
 		
-		if os.environ['BACKUP_HDFS'] :
-			cmd += "register backup_hdfs \n"
-			cmd += "EOF\n"
-		output += self._ssh_session.executeShell('su - reflex -c \"pmx <<EOF\n%s\" '% (cmd))
-		cmd     = 'pm process tps restart \n'
-		cmd 	+= "EOF"
-		output += self._ssh_session.executeShell('su - reflex -c \"cli -m config <<EOF\n%s\"' %(cmd))
-		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		if os.environ['BACKUP_HDFS'] and not os.environ['RPM_MODE']  :
+			cmd += "register backup_hdfs\n"
+			cmd += "set backup_hdfs namenode UNINIT\n"
+			
+		cmd = "pmx <<EOF\n" + cmd + "EOF\n"
+		
+		output += self._ssh_session.executeShellasUser('reflex',cmd)
+		output += self._ssh_session.executeCliasUser('reflex',"pm process tps restart")
+		message ( "TPS restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		
 		return output
 	
 	def clone_volume(self):
