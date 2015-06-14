@@ -9,12 +9,12 @@ release_ver = string(default = nightly)
 install_type = string(default  = manufacture)
 ntp_server = ip_addr( default = 198.55.111.5)
 yarn_nameservice = string( default = JeSuisYarn )
-snmpsink_server = ip_addr
+snmpsink_server = ip_addr(default=None)
 notifyFrom = string(default = Hubrix<kapil.aggarwal@guavus.com>)
 notifyTo = string_list(min=0, max=10, default = list('kapil.aggarwal@guavus.com'))
 
 [[__many__]]
-ip = ip_addr
+ip = ip_addr(default=None)
 username = string(default=admin)
 password = string(default=admin@123)
 brMgmt = string(default = mgmt)
@@ -22,7 +22,7 @@ brStor = string(default = stor)
 template_file = string(default = /data/virt/pools/default/template.img )
 
 [[[__many__]]]
-mgmt_ip = ip_addr
+mgmt_ip = ip_addr(default=None)
 mgmt_mask =  integer(min=8, max=32, default=24)
 gw = ip_addr(default=None)
 stor_ip = ip_addr(default=None)
