@@ -221,7 +221,10 @@ def config_collector(tuples):
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
-				message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
+				if os.environ['RPM_MODE']:
+					message ("Centos Config-Collector_Output in %s = [%s]" % (vm_name,vm.centos_col_basic()),{'style': 'INFO'} )
+				else :
+					message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 
@@ -325,6 +328,7 @@ def manuf_VMs(host):
 	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
 	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
 	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
+	message (  "HostMapping_Output = [%s] " % host.vmHostMaps()			,{'style': 'INFO'} )
 	if opt_lazy:
 		if host.is_template_present():
 			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
@@ -346,6 +350,8 @@ def manuf_Centos_VMs(host):
 	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
 	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
 	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
+	message (  "HostMapping_Output = [%s] " % host.vmHostMaps()			,{'style': 'INFO'} )
+
 	if opt_lazy:
 		# if lazy option given we check if centos_template is present
 		# otherwise we download from the location given in the INI file
@@ -443,6 +449,8 @@ def validate(config):
 				message ( 'The following section was missing:%s ' % ", ".join(section_list) , {'style':'DEBUG'} )
 		message ('Config file %s validation failed!'% config_filename, {'style':'FATAL'})
 		terminate_self("Exiting.")
+	else :
+		message ( 'INI validated', {'style':'OK'} )
 
 def wipe_vmpool(hosts):
 	message ( 'Wiping Hosts VM pools', {'style': 'INFO'} )
@@ -483,6 +491,11 @@ if __name__ == '__main__':
 						nargs=1,
 						type=str,
 						help='Custom logfile name. Default is <ScriptName.Time.log>')
+	parser.add_argument("-c","--check-ini",
+						dest='checkini',
+						action='store_true',
+						default=False,
+						help='Just validate INI file')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',
@@ -564,6 +577,7 @@ if __name__ == '__main__':
 	opt_wipe				= args.wipe_host
 	opt_skipvm				= args.skip_vm
 	opt_lazy				= args.lazy
+	opt_checkini			= args.checkini
 	opt_reconfig			= args.reconfig
 	opt_backuphdfs			= args.backup_hdfs
 	opt_colsanity			= args.col_sanity
@@ -580,6 +594,8 @@ if __name__ == '__main__':
 	configspec='config.spec'
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
+	if opt_checkini :
+		exit()
 	if not opt_colsanity_only :
 		if opt_skip_format and opt_force_format :
 			message ( "No-Format and force format options cannot be used together." ,	{'style':'FATAL'} )
@@ -646,13 +662,21 @@ if __name__ == '__main__':
 		centos_basic_settings(allvms)
 		centos_keygen(allvms)
 		centos_keyshare(allvms)
-		centos_cfg_storage(allvms)
+		if opt_storage is True:
+			centos_cfg_storage(allvms)
 		centos_install_reflex(allvms)
 		centos_reflex_keygen(allvms)
 		centos_reflex_keyshare(allvms)
-		centos_setupClusters(allvms)
-		centos_setupHDFS(allvms)
-		hdfs_report = centos_checkHDFS(allvms)
+		
+		if opt_ha is True:
+			centos_setupClusters(allvms)
+		else:
+			clear_ha(allvms)
+			
+		if opt_hdfs is True:
+			centos_setupHDFS(allvms)
+			hdfs_report = centos_checkHDFS(allvms)
+			config_collector(allvms)
 
 	if opt_email:
 		message ('Sending out emails: ' ,{'style' : 'info'})

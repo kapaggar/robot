@@ -188,7 +188,21 @@ keys /etc/ntp/keys
 		output += self._ssh_session.executeShell('chkconfig ntpd on ')
 		output += self._ssh_session.executeShell('chkconfig ntpdate on ')
 		return output
-
+	
+	def centos_col_basic(self):
+		output = ''
+		try:
+			output += self._ssh_session.executeCliasUser('reflex','pm process collector launch enable')
+			output += self._ssh_session.executeCliasUser('reflex','pm process collector launch relaunch auto')
+			output += self._ssh_session.executeCliasUser('reflex','pm process collector launch auto')
+			output += self._ssh_session.executeCliasUser('reflex','pm liveness grace-period 600')
+			output += self._ssh_session.executeCliasUser('reflex','internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
+			output += " Success"
+		except Exception:
+			message ("Failed in config_collector" ,						{'style':'NOK'})
+			return "Failed"
+		return output
+	
 	def centos_format_storage(self):
 		output = ''
 		format_option = ""
@@ -344,10 +358,12 @@ UserKnownHostsFile /dev/null
 			return False # TODO Raise exception
 		if not self._cluster_name:
 			self._cluster_name = self._set_clusterName()
-		output += self._ssh_session.executeCliasUser('reflex',"cluster id %s" % (self._cluster_name))
-		output += self._ssh_session.executeCliasUser('reflex',"cluster master address vip %s /%s" %(self._clusterVIP,self._mask))
-		output += self._ssh_session.executeCliasUser('reflex',"cluster name %s" % (self._cluster_name))
-		output += self._ssh_session.executeCliasUser('reflex',"cluster enable")
+			
+		cmd += "cluster id %s \n" % (self._cluster_name)
+		cmd += "cluster master address vip %s /%s \n" %(self._clusterVIP,self._mask)
+		cmd += "cluster name %s \n" % (self._cluster_name)
+		cmd += "cluster enable \n"
+		output += self._ssh_session.executeCliasUser('reflex',cmd,timeout=15)
 		return output
 
 	def centos_setup_HDFS(self):
@@ -625,7 +641,10 @@ UserKnownHostsFile /dev/null
 		#	message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s" % self._name ,{'style':'NOK'})
 		#	return False
 		try:
-			output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
+			if os.environ['RPM_MODE'] :
+				output += self._ssh_session.executeShellasUser('reflex','/tmp/yarn-config-check.sh',wait=5,timeout=30)
+			else :
+				output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
 			return output
 		except Exception:
 			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
@@ -688,7 +707,10 @@ UserKnownHostsFile /dev/null
 			return False
 
 	def info_yarn_Setup(self):
-		return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report')
+		if os.environ['RPM_MODE'] :
+			return self._ssh_session.executeShellasUser('reflex','/opt/hadoop/bin/hdfs dfsadmin -report')
+		else :
+			return self._ssh_session.executeCli('_exec /opt/hadoop/bin/hdfs dfsadmin -report')
 
 	def logout_iscsiNode(self,ip_port):
 		output = ''

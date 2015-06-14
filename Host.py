@@ -256,6 +256,13 @@ class Host(object):
 				message ( "VM-Install	= [%s]" % vm.image_install()	, {'style': 'INFO'} )
 				message ( "VM-Reload	= [%s]" % vm.reload()			, {'style': 'INFO'} )
 	
+	def vmHostMaps(self):
+		output = ''
+		for vm_name in self._vms:
+			vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
+			output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
+		return output + "Success"
+
 	def wipe_setup(self):
 		output = ''
 		cmd  = "pkill -9 qemu-kvm \n"

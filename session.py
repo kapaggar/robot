@@ -195,7 +195,7 @@ class session(object):
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
 			return output
 
-	def executeShellasUser(self,user,cmd):
+	def executeShellasUser(self,user,cmd,wait=1,timeout=180):
 		# su - reflex -c "cli -m config <<< 'conf wr'"  
 		output = ''
 		prompt = self.getPrompt()
@@ -203,11 +203,11 @@ class session(object):
 		if prompt == "cli":
 			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
-			output += self.run_till_prompt('su - %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait=1,timeout=5)
+			output += self.run_till_prompt('runuser -l %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait,timeout)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
 		elif prompt == "shell":
-			output += self.run_till_prompt('runuser -l %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait=1,timeout=5)
+			output += self.run_till_prompt('runuser -l %s -c \"%s\" '% (user,cmd), self.re_shellPrompt,wait,timeout)
 			return output
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
@@ -229,7 +229,7 @@ class session(object):
 		if prompt == "cli":
 			output += self.run_till_prompt("_shell", self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait=1)
-			output += self.run_till_prompt('su - %s -c \"cli -m config <<< \'%s\'\" '% (user,cmd), self.re_shellPrompt,wait=1)
+			output += self.run_till_prompt('runuser -l %s -c \"cli -m config <<< \'%s\'\" '% (user,cmd), self.re_shellPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
 		elif prompt == "shell":
