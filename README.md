@@ -57,9 +57,9 @@ END
 Download the virtual python env containing all necessary scripts. Below is one time activity.
 
 ```
-# wget http://eagle.ggn.in.guavus.com/users/kapil/python_env.bzip2
-# tar -xf python_env.bzip2
-# echo "alias activate='source ~/python_env/bin/activate'" >> ~/.bashrc
+# wget http://kite.ggn.in.guavus.com/users/kapil/hubrix/hubrix-latest.bzip
+# tar -xf hubrix-latest.bzip
+# echo "alias activate='source ~/hubrix/bin/activate'" >> ~/.bashrc
 # source ~/.bashrc
 # activate
 # cd python_env/robot
@@ -68,9 +68,10 @@ Download the virtual python env containing all necessary scripts. Below is one t
 Full help Section
 =================
 # ./Setup.py -h
-usage: Setup.py [-h] [-l LOGFILE] [--lazy] [--reconfig] [--no-storage]
+usage: Setup.py [-h] [-l LOGFILE] [-c] [--lazy] [--reconfig] [--no-storage]
                 [--force-format] [--no-format] [--no-ha] [--no-hdfs] [--wipe]
-                [--skip-vm SKIP_VM [SKIP_VM ...]]
+                [--no-backup-hdfs] [--col-sanity] [--col-sanity-only]
+                [--email] [--rpm] [--skip-vm SKIP_VM [SKIP_VM ...]]
                 INIFILE
 
 Make Appliance setups from INI File
@@ -81,8 +82,8 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -l LOGFILE, --log LOGFILE
-                        Custom logfile name. default is script.PID.log
-                        (DoesNOT redirects stdout)
+                        Custom logfile name. Default is <ScriptName.Time.log>
+  -c, --check-ini       Just validate INI file
   --lazy                Skip creating template. Use previous one
   --reconfig            Skip manuf. VMS . Just factory revert and apply INI
   --no-storage          Skip iscsi config and remote storage
@@ -90,9 +91,30 @@ optional arguments:
   --no-format           Don't format remote storage, override ini settings
   --no-ha               skip configuring clustering.
   --no-hdfs             skip configuring HDFS
-  --wipe                First delete Host VM-Pool
+  --wipe                Delete Host's complete VM-Pool in initialisation
+  --no-backup-hdfs      Skip configuring backup hdfs if configuring yarn
+  --col-sanity          Execute Collector Sanity test-suite
+  --col-sanity-only     Execute Only Collector Sanity test-suite. Implies that
+                        setup is collector ready
+  --email               Send results and report in email
+  --rpm                 Test Platform rpm model
+  --skip-vm SKIP_VM [SKIP_VM ...]
+                        TOBE_IMPLEMENTED skip vm in ini with these names
 
 
+```
+## Extend hubrix
+To install additional python packages for addon functionality
+```
+# symlink_headers 
+Now you will be able to install / upgrade the python packages inside hubrix ( Not touching the Appliance ENV )
+# pip install --upgrade setuptools
+Collecting setuptools
+  Downloading setuptools-17.1.1-py2.py3-none-any.whl (461kB)
+    100% |################################| 462kB 541kB/s 
+Installing collected packages: setuptools
+      Successfully uninstalled setuptools-11.0
+Successfully installed setuptools-17.1.1
 ```
 
 ##How to make ini file
@@ -153,39 +175,10 @@ setup.ini
 - clustering 
 - HDFS HA
 
-FIVE.ini:
-- Auto picks kite nightly
-- manufacture + upgrade
-- clustering enabled
-- storage enabled
-- yarn HA
 
 
 
-FOUR.ini
--manufacture
-- no clustering
-- storage enabled
-- no yarn HA
-
-
-
-THREE.ini 
-- Auto picks eagle's 4.2 nightly
-- manufacture
-- clustering enabled
-- storage enabled
-- yarn HA
-
-
-
-TWO.ini
-- manufacture
-- only mgmt n/w
-- clustering 
-- hdfs
-- no storage
 
 License
 ----
-**Free Software, Hell Yeah!**
+**Free , Hell Yeah!**
