@@ -14,6 +14,7 @@ from Toolkit import message,notify_email,terminate_self,collect_results,collecto
 from pprint import pprint
 
 hosts = list()
+hdfs_report = ''
 
 def basic_settings(tuples):
 	for line in tuples:
