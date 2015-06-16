@@ -221,7 +221,7 @@ class session(object):
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			return output
 		
-	def executeCliasUser(self,user,cmd):
+	def executeCliasUser(self,user,cmd,wait=1,timeout=180):
 		# su - reflex -c "cli -m config <<< 'conf wr'"  
 		output = ''
 		prompt = self.getPrompt()

@@ -290,7 +290,7 @@ UserKnownHostsFile /dev/null
 	def centos_install_base(self):
 		output = ''
 		response = ''
-		base_pkgs = "wget tar ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof"
+		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen"
 		output 	+= self._ssh_session.executeShell('yum clean all' )
 		message ( "Installing pkgs [%s] in %s " % ( base_pkgs, self._name) ,{'to_trace': '1' ,'style': 'TRACE'}  )
 		response = self._ssh_session.executeShell('yum install -y %s'%(base_pkgs) )
