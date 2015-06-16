@@ -330,8 +330,7 @@ UserKnownHostsFile /dev/null
 	def centos_setIpHostMaps(self):
 		output = ''
 		for vm in self.nodes_ip.keys():
-#			output += self._ssh_session.executeShell('sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts' %(self.nodes_ip[vm],self.nodes_ip[vm],vm))
-			output += self._ssh_session.executeShell('echo \"%s %s\" >> /etc/hosts' %(self.nodes_ip[vm],vm))
+			output += self._ssh_session.executeShell('grep %s /etc/hosts && sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts || echo \"%s %s\" >> /etc/hosts' %(vm, self.nodes_ip[vm],self.nodes_ip[vm],vm, self.nodes_ip[vm],vm))
 		return output
 
 	def centos_install_reflex(self):
@@ -340,10 +339,11 @@ UserKnownHostsFile /dev/null
 		reflex_package_list = []
 		reflex_package_list.append('reflex-tm')
 		reflex_package_list.append('reflex-common')
-		reflex_package_list.append('reflex-tps')
 		reflex_package_list.append('hadoop')
+		reflex_package_list.append('reflex-tps')
 		if self.is_namenode():
 			reflex_package_list.append('reflex-collector')
+
 		output 	+= self._ssh_session.executeShell('yum clean all ')
 		for reflex_pkg in reflex_package_list:
 			response = self._ssh_session.executeShell('yum install -y %s ' %(reflex_pkg))

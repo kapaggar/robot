@@ -88,16 +88,28 @@ def centos_checkHDFS(tuples):
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 	return output
 
-def centos_install_reflex(tuples):
+def centos_sync_install_reflex(tuples):
+	threads = []
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now installing reflex components via yum inside VM %s" % vm_name,{'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.ssh_self():
-			message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())			,{'style': 'INFO'} )
-		else:
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-			terminate_self("Exiting")
+		newThread = threading.Thread(target=centos_install_reflex, args = (line,))
+		newThread.setDaemon(True)
+		message ( "Parallel install of reflex components inside VM %s" % vm_name,{'style': 'INFO'} )
+		newThread.start()
+		threads.append(newThread)
+	for thread in threads:
+			thread.join()
+	return "Success"
+
+def centos_install_reflex(line):
+	host,vm_name = line.split(":")
+	vm = config['HOSTS'][host][vm_name]['vm_ref']
+	time.sleep(1)
+	if vm.ssh_self():
+		message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())			,{'style': 'INFO'} )
+	else:
+		message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+		terminate_self("Exiting")
 	return "Success"
 
 def centos_keygen(tuples):
@@ -665,7 +677,7 @@ if __name__ == '__main__':
 		centos_keyshare(allvms)
 		if opt_storage is True:
 			centos_cfg_storage(allvms)
-		centos_install_reflex(allvms)
+		centos_sync_install_reflex(allvms)
 		centos_reflex_keygen(allvms)
 		centos_reflex_keyshare(allvms)
 		

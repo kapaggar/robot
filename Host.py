@@ -258,6 +258,7 @@ class Host(object):
 	
 	def vmHostMaps(self):
 		output = ''
+		output += self._ssh_session.executeCli('ssh client global host-key-check no' )
 		for vm_name in self._vms:
 			vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
 			output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )

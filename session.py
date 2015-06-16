@@ -299,29 +299,34 @@ class session(object):
 	def getPrompt(self):
 		got_prompt = False
 		timeOut = 60
-		while timeOut > 0:
-			self.write("")
-			buff = self.read()
-			if buff is not None:
-				lines = buff.splitlines()
-			else:
-				continue
-			if len(lines) > 0:
-				buff = lines[-1]
-				if buff and not buff.isspace():   # the string is non-empty
-					got_prompt = True
-					break
+		retry = 5
+		prompt = False
+		while not prompt and retry > 0 :
+			retry = retry - 1
+			while timeOut > 0:
+				self.write("")
+				buff = self.read()
+				if buff is not None:
+					lines = buff.splitlines()
+				else:
+					continue
+				if len(lines) > 0:
+					buff = lines[-1]
+					if buff and not buff.isspace():   # the string is non-empty
+						got_prompt = True
+						break
+					else :
+						timeOut = timeOut - 1
 				else :
 					timeOut = timeOut - 1
-			else :
-				timeOut = timeOut - 1
-		try:
 			if got_prompt:
-				prompt = self.tellPrompt(buff) 
-				return prompt   
-		except Exception:
-			message ( "Unable to reach a Prompt in getPrompt", {'to_log':1 , 'style': 'DEBUG'} ) 
-			return False
+				prompt = self.tellPrompt(buff)
+			else :
+				message ( "Cannot to decide the Prompt. Buffer = %s ... %s retries left " %(buff,retry), {'to_log':1 , 'style': 'DEBUG'} ) 
+		if not prompt :
+			message ( "Giving up on getting Prompt.", {'to_log':1 , 'style': 'DEBUG'} ) 
+		return prompt   
+
 
 	def run_till_prompt(self, cmd, prompt=re_cliPrompt, wait=1,timeout=300):
 		data = ''
