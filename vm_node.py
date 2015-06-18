@@ -172,6 +172,12 @@ class vm_node(object):
 		output += report 
 		return output
 
+	def centos_cfg_rsyslog(self):
+		output = ''
+		output += self._ssh_session.executeShell('grep -q \'$SystemLogRateLimitInterval 0\' /etc/rsyslog.conf  && echo \'rsyslog.conf already has $SystemLogRateLimitInterval 0\'  || echo \'$SystemLogRateLimitInterval 0\' >> /etc/rsyslog.conf ' )
+		output += self._ssh_session.executeShell('service rsyslog restart')
+		return output
+
 	def centos_cfg_ntp(self):
 		output = ''
 		ntp_config = '''restrict default nomodify notrap noquery
@@ -290,7 +296,7 @@ UserKnownHostsFile /dev/null
 	def centos_install_base(self):
 		output = ''
 		response = ''
-		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen"
+		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen xz strace"
 		output 	+= self._ssh_session.executeShell('yum clean all' )
 		message ( "Installing pkgs [%s] in %s " % ( base_pkgs, self._name) ,{'to_trace': '1' ,'style': 'TRACE'}  )
 		response = self._ssh_session.executeShell('yum install -y %s'%(base_pkgs) )
@@ -330,7 +336,7 @@ UserKnownHostsFile /dev/null
 	def centos_setIpHostMaps(self):
 		output = ''
 		for vm in self.nodes_ip.keys():
-			output += self._ssh_session.executeShell('grep %s /etc/hosts && sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts || echo \"%s %s\" >> /etc/hosts' %(vm, self.nodes_ip[vm],self.nodes_ip[vm],vm, self.nodes_ip[vm],vm))
+			output += self._ssh_session.executeShell('grep -q %s /etc/hosts && sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts || echo \"%s %s\" >> /etc/hosts' %(vm, self.nodes_ip[vm],self.nodes_ip[vm],vm, self.nodes_ip[vm],vm))
 		return output
 
 	def centos_install_reflex(self):

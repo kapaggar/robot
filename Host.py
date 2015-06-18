@@ -56,7 +56,7 @@ class Host(object):
 			output +=  self._ssh_session.run_till_prompt('root', "#",wait=1)
 			output +=  self._ssh_session.run_till_prompt('PS1="my_PROMPT"', "my_PROMPT",wait=1)
 			message ( "Invoking manufacture.sh inside vm-node as %s"%(manufacture_cmd) ,{ 'style': 'OK'}  )
-			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=8192/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
+			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=12288/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
 			output +=  self._ssh_session.run_till_prompt(manufacture_cmd,"my_PROMPT",wait=60)
 			output +=  self._ssh_session.run_till_prompt('reboot')
 		except Exception:

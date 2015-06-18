@@ -6,6 +6,7 @@ import re
 import datetime
 import argparse
 import threading
+import random
 from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
@@ -39,22 +40,38 @@ def basic_settings(tuples):
 			terminate_self("Exiting")
 	return "Success"
 
-def centos_basic_settings(tuples):
+def centos_sync_basic_settings(tuples):
+	threads = []
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now going inside VM %s, setting up ssh connections" % vm_name			, {'style': 'INFO'} )
-		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.ssh_self():
-			message ( "Centos RotateLog_Output = %s " %vm.centos_rotate_logs()				, {'style': 'INFO'} )
-			if opt_reconfig:
-				message ( "Centos Factory-Revert_Output = %s " %vm.centos_factory_revert()	, {'style': 'INFO'} )
-			message ( "Centos get Base repo = %s " 			%vm.centos_get_repo()			, {'style': 'INFO'} )
-			message ( "Centos Install basic packages = %s " %vm.centos_install_base()		, {'style': 'INFO'} )
-			message ( "Centos Configure ntp  = %s " 		%vm.centos_cfg_ntp()			, {'style': 'INFO'} )
-			message ( "Centos Hostname maps Output = %s "	%vm.centos_setIpHostMaps()		, {'style': 'INFO'} )
-		else:
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-			terminate_self("Exiting")
+		newThread = threading.Thread(target=centos_basic_settings, args = (line,))
+		newThread.setDaemon(True)
+		message ( "Parallel base package installation inside VM %s\n" % vm_name,{'style': 'INFO'} )
+		newThread.start()
+		threads.append(newThread)
+	for thread in threads:
+			thread.join()
+	return "Success"
+
+def centos_basic_settings(line):
+	host,vm_name = line.split(":")
+	time.sleep(random.random())
+	message ( "Now going inside VM %s, setting up ssh connections" % vm_name			, {'style': 'INFO'} )
+	vm = config['HOSTS'][host][vm_name]['vm_ref']
+	if vm.ssh_self():
+		message ( "Centos RotateLog_Output in vm %s = %s " %(vm_name,vm.centos_rotate_logs())				, {'style': 'INFO'} )
+		if opt_reconfig:
+			message ( "Centos Factory-Revert_Output in vm %s = %s " %(vm_name,vm.centos_factory_revert())	, {'style': 'INFO'} )
+		message ( "Centos get Base repo in vm %s = %s " 			%(vm_name,vm.centos_get_repo())			, {'style': 'INFO'} )
+		message ( "Centos Install basic packages in vm %s = %s " %(vm_name,vm.centos_install_base())		, {'style': 'INFO'} )
+		message ( "Centos Configure ntp in vm %s  = %s " 		%(vm_name,vm.centos_cfg_ntp())			, {'style': 'INFO'} )
+		message ( "Centos Hostname maps Output in vm %s  = %s "	%(vm_name,vm.centos_setIpHostMaps())		, {'style': 'INFO'} )
+		message ( "Centos rsyslog config in vm %s  = %s "	%(vm_name,vm.centos_cfg_rsyslog())		, {'style': 'INFO'} )
+
+		
+	else:
+		message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+		terminate_self("Exiting")
 	return "Success"
 
 def centos_cfg_storage(tuples):
@@ -104,7 +121,7 @@ def centos_sync_install_reflex(tuples):
 def centos_install_reflex(line):
 	host,vm_name = line.split(":")
 	vm = config['HOSTS'][host][vm_name]['vm_ref']
-	time.sleep(1)
+	time.sleep(random.random())
 	if vm.ssh_self():
 		message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())			,{'style': 'INFO'} )
 	else:
@@ -603,7 +620,10 @@ if __name__ == '__main__':
 	if args.log:
 		os.environ["LOGFILE_NAME"] = args.log[0]
 		
-	message ("Got input file as %s " % config_filename,{'to_stdout' : 1, 'to_log' : 1, 'style' : 'INFO'})	
+	message ("Got input file as %s " % config_filename,{'to_stdout' : 1, 'to_log' : 1, 'style' : 'INFO'})
+	if not os.path.isfile(config_filename):
+		message ( "INI file %s doesnot exists."%(config_filename) ,	{'style':'FATAL'} )
+		sys.exit(1)
 	configspec='config.spec'
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
@@ -672,7 +692,7 @@ if __name__ == '__main__':
 			config_collector(allvms)
 	
 	if opt_rpm:
-		centos_basic_settings(allvms)
+		centos_sync_basic_settings(allvms)
 		centos_keygen(allvms)
 		centos_keyshare(allvms)
 		if opt_storage is True:
