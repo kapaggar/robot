@@ -31,7 +31,7 @@ memory 					= integer(	default = 16384, min=8192, max=96000, )
 stor_mask 				= integer(	default = 24, min=8, max=32, )
 mgmtNic 				= string(	default = eth0 )
 storNic 				= string(	default = eth1 )
-enabled_users 			= string_list
+enabled_users                   = string_list(  default = list('admin:admin@123' , 'root:root@123' , 'monitor:monitor@123'))
 cluster_vip 			= ip_addr(	default = None)
 name_node 				= integer(	default = None)
 journal_node 			= integer(	default = None,	min=1, max=6, )
