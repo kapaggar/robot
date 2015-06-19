@@ -40,6 +40,7 @@ class vm_node(object):
 		self._clusterVIP			= config['HOSTS'][host][vm]['cluster_vip']
 		self._namenode				= config['HOSTS'][host][vm]['name_node']
 		self._journalnode			= config['HOSTS'][host][vm]['journal_node']
+		self._datanode				= config['HOSTS'][host][vm]['data_node']
 		self._initiatorname_iscsi	= config['HOSTS'][host][vm]['storage']['initiatorname_iscsi']
 		self._iscsi_target			= config['HOSTS'][host][vm]['storage']['iscsi_target']
 		self._forbidden_nodes		= config['HOSTS'][host][vm]['storage']['forbidden_nodes']
@@ -64,7 +65,7 @@ class vm_node(object):
 			self.registerNameNode()
 		elif self._journalnode:
 			self.registerJournalNode()
-		else:
+		if self._datanode:
 			self.registerDataNode()
 
 	def __del__(self):
