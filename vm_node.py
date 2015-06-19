@@ -65,6 +65,8 @@ class vm_node(object):
 			self.registerNameNode()
 		elif self._journalnode:
 			self.registerJournalNode()
+		else :
+			self.registerDataNode()
 		if self._datanode:
 			self.registerDataNode()
 
@@ -179,6 +181,21 @@ class vm_node(object):
 		output += self._ssh_session.executeShell('service rsyslog restart')
 		return output
 
+	def centos_cfg_sudo(self):
+		output = ''
+		sudo_config = '''Cmnd_Alias REFLEX_CMDS =  /sbin/ifconfig,\
+/bin/ping,\
+/sbin/iptables, \
+/sbin/arping, \
+/sbin/ip
+
+%reflex  ALL= NOPASSWD: REFLEX_CMDS
+Defaults:%reflex !requiretty
+'''
+		output += self._ssh_session.executeShell('echo \'%s\' > /etc/sudoers.d/reflex ' %(sudo_config))
+		output += self._ssh_session.executeShell('chmod 440 /etc/sudoers.d/reflex ')
+		return output
+	
 	def centos_cfg_ntp(self):
 		output = ''
 		ntp_config = '''restrict default nomodify notrap noquery
@@ -204,6 +221,7 @@ keys /etc/ntp/keys
 			output += self._ssh_session.executeCliasUser('reflex','pm process collector launch auto')
 			output += self._ssh_session.executeCliasUser('reflex','pm liveness grace-period 600')
 			output += self._ssh_session.executeCliasUser('reflex','internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
+			output += self._ssh_session.executeCliasUser('reflex','config write')
 			output += " Success"
 		except Exception:
 			message ("Failed in config_collector" ,						{'style':'NOK'})
@@ -250,8 +268,10 @@ keys /etc/ntp/keys
 
 	def centos_factory_revert(self):
 		output = ''
+		response = ''
 		output += self._ssh_session.executeShell('service reflex stop')
-		output += self._ssh_session.executeShell('yum erase -y reflex*')
+		response = self._ssh_session.executeShell('yum erase -y reflex*')
+		output += response[-80:]
 		output += self._ssh_session.executeShell('rm -rf  /opt/reflex')
 		return output
 	
@@ -371,6 +391,7 @@ UserKnownHostsFile /dev/null
 		cmd += "cluster name %s \n" % (self._cluster_name)
 		cmd += "cluster enable \n"
 		output += self._ssh_session.executeCliasUser('reflex',cmd,timeout=15)
+		output += self._ssh_session.executeCliasUser('reflex','config write')
 		return output
 
 	def centos_setup_HDFS(self):
@@ -414,6 +435,7 @@ UserKnownHostsFile /dev/null
 		cmd = "pmx <<EOF\n" + cmd + "EOF\n"
 		
 		output += self._ssh_session.executeShellasUser('reflex',cmd)
+		output += self._ssh_session.executeShellasUser('reflex','config write')
 		output += self._ssh_session.executeCliasUser('reflex',"pm process tps restart")
 		message ( "TPS restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		

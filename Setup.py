@@ -67,6 +67,7 @@ def centos_basic_settings(line):
 		message ( "Centos Configure ntp in vm %s  = %s " 		%(vm_name,vm.centos_cfg_ntp())			, {'style': 'INFO'} )
 		message ( "Centos Hostname maps Output in vm %s  = %s "	%(vm_name,vm.centos_setIpHostMaps())		, {'style': 'INFO'} )
 		message ( "Centos rsyslog config in vm %s  = %s "	%(vm_name,vm.centos_cfg_rsyslog())		, {'style': 'INFO'} )
+		message ( "Centos add reflex sudoer in vm %s  = %s "	%(vm_name,vm.centos_cfg_sudo())		, {'style': 'INFO'} )
 
 		
 	else:
