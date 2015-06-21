@@ -317,17 +317,17 @@ UserKnownHostsFile /dev/null
 	def centos_install_base(self):
 		output = ''
 		response = ''
-		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen xz strace"
+		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen xz strace device-mapper-multipath iscsi-initiator-utils"
 		output 	+= self._ssh_session.executeShell('yum clean all' )
 		message ( "Installing pkgs [%s] in %s " % ( base_pkgs, self._name) ,{'to_trace': '1' ,'style': 'TRACE'}  )
-		response = self._ssh_session.executeShell('yum install -y %s'%(base_pkgs) )
+		response = self._ssh_session.executeShell('yum install -y --nogpgcheck %s'%(base_pkgs) )
 		output += response[-80:]
 		# I dont like hardcoding these packages location, but thats how it is now.
 		message ( "Installing pkg jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm in %s " % ( self._name) ,{'to_log': '1' ,'style': 'INFO'}  )
-		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
+		response = self._ssh_session.executeShell('yum install -y --nogpgcheck http://192.168.104.78/users/kapil/RPM/java-rpms/jre1.8.0_31-1.8.0_31-fcs.x86_64.rpm' )
 		message ( "Installing pkg virtual-java-1.8-31.noarch.rpm in %s " % ( self._name) ,{'to_log': '1' ,'style': 'INFO'}  )
 		output += response[-80:]
-		response = self._ssh_session.executeShell('yum install -y http://192.168.104.78/users/kapil/RPM/java-rpms/virtual-java-1.8-31.noarch.rpm' )
+		response = self._ssh_session.executeShell('yum install -y --nogpgcheck http://192.168.104.78/users/kapil/RPM/java-rpms/virtual-java-1.8-31.noarch.rpm' )
 		output += response[-80:]
 		return output
 	
@@ -373,7 +373,7 @@ UserKnownHostsFile /dev/null
 
 		output 	+= self._ssh_session.executeShell('yum clean all ')
 		for reflex_pkg in reflex_package_list:
-			response = self._ssh_session.executeShell('yum install -y %s ' %(reflex_pkg))
+			response = self._ssh_session.executeShell('yum install -y --nogpgcheck %s ' %(reflex_pkg))
 		output += response[-80:]
 		return output
 	
@@ -435,7 +435,7 @@ UserKnownHostsFile /dev/null
 		cmd = "pmx <<EOF\n" + cmd + "EOF\n"
 		
 		output += self._ssh_session.executeShellasUser('reflex',cmd)
-		output += self._ssh_session.executeShellasUser('reflex','config write')
+		output += self._ssh_session.executeCliasUser('reflex','config write')
 		output += self._ssh_session.executeCliasUser('reflex',"pm process tps restart")
 		message ( "TPS restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 		

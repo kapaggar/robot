@@ -113,7 +113,7 @@ def centos_sync_install_reflex(tuples):
 		newThread = threading.Thread(target=centos_install_reflex, args = (line,))
 		newThread.setDaemon(True)
 		message ( "Parallel install of reflex components inside VM %s" % vm_name,{'style': 'INFO'} )
-		newThread.start()
+		newThread.start() # This return immediately, so if you want to catch Exception do it in threads.
 		threads.append(newThread)
 	for thread in threads:
 			thread.join()

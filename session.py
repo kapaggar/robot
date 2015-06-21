@@ -355,8 +355,9 @@ class session(object):
 				data =  self.chan.recv(4096)
 				data = data.replace('\r', '')
 				if not output:
-						 data = data.replace('.*\n'  ,'')
-						 data = data.replace(cmd  ,'')
+						 data = data.replace('.*\n'  ,'') 	# remove everything before the first new line ( buffer before our typed command)
+						 data = data.replace(" \x08", '') 	# remove "space and ASCII backspace" with nothing
+						 data = data.replace(cmd  ,'')		# remove our own command from buffer, so that we have only output
 						 output += data
 				else:
 						 output += data
