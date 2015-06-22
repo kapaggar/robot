@@ -37,6 +37,7 @@ class vm_node(object):
 		self._brStor				= config['HOSTS'][host]['brStor']
 		self._template				= config['HOSTS'][host]['template_file']
 		self._enabledusers			= config['HOSTS'][host][vm]['enabled_users']
+		self._diskSizeinGB			= config['HOSTS'][host][vm]['disk_size']
 		self._clusterVIP			= config['HOSTS'][host][vm]['cluster_vip']
 		self._namenode				= config['HOSTS'][host][vm]['name_node']
 		self._journalnode			= config['HOSTS'][host][vm]['journal_node']
@@ -317,7 +318,12 @@ UserKnownHostsFile /dev/null
 	def centos_install_base(self):
 		output = ''
 		response = ''
-		base_pkgs = "wget ntp ntpdate kpartx net-snmp net-snmp-utils parted yum-utils tcpdump lrzsz lsof screen xz strace device-mapper-multipath iscsi-initiator-utils"
+		base_pkgs = "kpartx parted device-mapper-multipath iscsi-initiator-utils "
+		base_pkgs += "net-snmp net-snmp-utils "
+		base_pkgs += "ntp ntpdate "
+		base_pkgs += "yum-utils tcpdump lrzsz lsof screen xz strace wget "
+		base_pkgs += "acpid logrotate rng-tools rsync "
+		base_pkgs += "epel-release"
 		output 	+= self._ssh_session.executeShell('yum clean all' )
 		message ( "Installing pkgs [%s] in %s " % ( base_pkgs, self._name) ,{'to_trace': '1' ,'style': 'TRACE'}  )
 		response = self._ssh_session.executeShell('yum install -y --nogpgcheck %s'%(base_pkgs) )
@@ -1023,6 +1029,7 @@ HOSTNAME=%s
 		output +=  self._host_ssh_session.executeCli('_exec /bin/rm -f /mnt/cdrom/lib/udev/rules.d/75-persistent-net-generator.rules' )
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
 		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
+		output +=  self._host_ssh_session.executeCli('_exec qemu-img resize %s +%sG' % (self._diskimageFull,self._diskSizeinGB))
 		return output
 	
 	def set_user(self,user,password):
