@@ -999,7 +999,7 @@ IPV6INIT=no
 HOSTNAME=%s
 ''' % ( self._name)
 		var_offset = None
-		re_varoffset = re.compile( r"^\S+\.img1\s+\S\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
+		re_varoffset = re.compile( r"^\S+\.img1.*?(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
 		#output += self._host_ssh_session.executeCli('_exec tar -xf %s' % self._diskimageFull )
 		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
 		
