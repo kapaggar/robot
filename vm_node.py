@@ -33,6 +33,7 @@ class vm_node(object):
 		self._release_ver			= config['HOSTS']['release_ver']
 		self._upgrade_img			= config['HOSTS']['upgrade_img']
 		self._centos_repo_path		= config['HOSTS']['centos_repo_path']
+		self._pub_keys				= config['HOSTS']['pub_keys']
 		self._brMgmt				= config['HOSTS'][host]['brMgmt']
 		self._brStor				= config['HOSTS'][host]['brStor']
 		self._template				= config['HOSTS'][host]['template_file']
@@ -94,7 +95,13 @@ class vm_node(object):
 		except Exception :
 				message ( "Unable to get a free loop device on Host", {'style': 'FATAL'} )
 				return False
-	
+
+	def addINIKeys(self):
+		for row in self._pub_keys:
+			#user,pubkey = creds.split(":")
+			#verify the structure of public key
+			self.pub_keys.append(row)
+
 	def authPubKeys(self):
 		output = ''
 		output += self._ssh_session.executeCli('ssh client global host-key-check no')
@@ -1016,7 +1023,6 @@ HOSTNAME=%s
 			return False
 		
 		offset_bytes = int(var_offset) * 512
-		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
 		loop_dev = self._get_loop_device()
 		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes )) 
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/' )
@@ -1057,7 +1063,6 @@ HOSTNAME=%s
 			return False
 		
 		offset_bytes = int(var_offset) * 512
-		next_loop_available = self._host_ssh_session.executeCli('_exec /sbin/losetup -f')
 		loop_dev = self._get_loop_device()
 		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes ))
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/')

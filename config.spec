@@ -12,6 +12,7 @@ yarn_nameservice 		= string(	default = JeSuisYarn )
 snmpsink_server 		= ip_addr(	default = None)
 notifyFrom 				= string(	default = Hubrix<kapil.aggarwal@guavus.com>)
 notifyTo 				= string_list(min=0, max=10, default = list('kapil.aggarwal@guavus.com'))
+pub_keys				= string_list(min=0, max=10, default = list(''))
 
 [[__many__]]
 ip 						= ip_addr(	default = None)
