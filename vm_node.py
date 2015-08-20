@@ -32,7 +32,6 @@ class vm_node(object):
 		self._snmpsink				= config['HOSTS']['snmpsink_server']
 		self._release_ver			= config['HOSTS']['release_ver']
 		self._upgrade_img			= config['HOSTS']['upgrade_img']
-		self._host_ssh_session		= config['HOSTS'][host]['ssh_session']
 		self._brMgmt				= config['HOSTS'][host]['brMgmt']
 		self._brStor				= config['HOSTS'][host]['brStor']
 		self._template				= config['HOSTS'][host]['template_file']
@@ -55,6 +54,10 @@ class vm_node(object):
 		self._stor_mask				= config['HOSTS'][host][vm]['stor_mask']
 		self._cpu					= config['HOSTS'][host][vm]['cpus']
 		self._memory				= config['HOSTS'][host][vm]['memory']
+		try:
+			self._host_ssh_session		= config['HOSTS'][host]['ssh_session']
+		except Exception :
+			self._host_ssh_session		= False
 		self.config_ref				= config
 		if self._namenode:
 			self.registerNameNode()

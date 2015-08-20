@@ -367,6 +367,11 @@ if __name__ == '__main__':
 						action='store_true',
 						default=False,
 						help='Execute Collector Sanity test-suite')
+	parser.add_argument("--col-sanity-only",
+						dest='col_sanity_only',
+						action='store_true',
+						default=False,
+						help='Execute Only Collector Sanity test-suite. Implies that setup is collector ready')
 	parser.add_argument("--email",
 						dest='email',
 						action='store_true',
@@ -391,6 +396,7 @@ if __name__ == '__main__':
 	opt_reconfig			= args.reconfig
 	opt_backuphdfs			= args.backup_hdfs
 	opt_colsanity			= args.col_sanity
+	opt_colsanity_only		= args.col_sanity_only
 	opt_email				= args.email
 	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
 	allvms = None
@@ -401,21 +407,26 @@ if __name__ == '__main__':
 	configspec='config.spec'
 	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
-	if opt_skip_format and opt_force_format :
-		message ( "No-Format and force format options cannot be used together." ,	{'style':'FATAL'} )
-		sys.exit(1)
-	if opt_wipe and opt_lazy :
-		message ( "Wipe and Lazy options cannot be used together.", 				{'style':'FATAL'} )
-		sys.exit(1)
-	if opt_wipe and opt_reconfig:
-		message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
-		sys.exit(1)
-	if not opt_lazy and not opt_reconfig :
-		message ( "Verifying iso exists that will be used for template ",			{'style':'INFO'} )
-		if not check_iso_exists(config):
-			terminate_self("Cannot proceed further as iso not present")
-		else:
-			message ( "ISO url valid . Will make a template",						{'style':'INFO'} )
+	if not opt_colsanity_only :
+		if opt_skip_format and opt_force_format :
+			message ( "No-Format and force format options cannot be used together." ,	{'style':'FATAL'} )
+			sys.exit(1)
+		if opt_wipe and opt_lazy :
+			message ( "Wipe and Lazy options cannot be used together.", 				{'style':'FATAL'} )
+			sys.exit(1)
+		if opt_wipe and opt_reconfig:
+			message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
+			sys.exit(1)
+		if not opt_lazy and not opt_reconfig :
+			message ( "Verifying iso exists.",			{'style':'INFO'} )
+			if not check_iso_exists(config):
+				terminate_self("Cannot proceed further as iso not present")
+			else:
+				message ( "ISO url valid.",						{'style':'INFO'} )
+		if opt_colsanity :
+			message ( "Will be running Collector Test-Suite ",			{'style':'INFO'} )
+	else :
+		message ( "Will be running Collector Test-Suite Only",			{'style':'INFO'} )
 
 	hosts = get_hosts(config)
 	install_type = config['HOSTS']['install_type']
@@ -426,43 +437,45 @@ if __name__ == '__main__':
 		config['HOSTS']['force_format'] = False
 		
 	start_time = time.time()
-	
-	#Setup Hosts Connectivity 
-	connect_hosts(hosts)
-	if opt_wipe :
-		wipe_vmpool(hosts)
-	if 'manufacture' in install_type:
-		if not opt_reconfig:
-			do_manufacture(hosts)
+	if not opt_colsanity_only:
+		#Setup Hosts Connectivity 
+		connect_hosts(hosts)
+		if opt_wipe :
+			wipe_vmpool(hosts)
+		if 'manufacture' in install_type:
+			if not opt_reconfig:
+				do_manufacture(hosts)
 
 	allvms = get_allvms(config)
 	objectify_vms(allvms)
 	
-	basic_settings(allvms)
-	generate_keys(allvms)
-	shareKeys(allvms)
-	if opt_ha is True:
-		setupClusters(allvms)
-	else:
-		clear_ha(allvms) # Remove Clustering config nodes & convert NameNode2 config node to dataNode
-	if opt_storage is True:
-		setupStorage(allvms)
-	if opt_hdfs is True:
-		setupHDFS(allvms)
-		hdfs_report = checkHDFS(allvms)
-		config_collector(allvms)
+	if not opt_colsanity_only:
+		basic_settings(allvms)
+		generate_keys(allvms)
+		shareKeys(allvms)
+		if opt_ha is True:
+			setupClusters(allvms)
+		else:
+			clear_ha(allvms) # Remove Clustering config nodes & convert NameNode2 config node to dataNode
+		if opt_storage is True:
+			setupStorage(allvms)
+		if opt_hdfs is True:
+			setupHDFS(allvms)
+			hdfs_report = checkHDFS(allvms)
+			config_collector(allvms)
+			
+		if opt_email:
+			message ('Sending out emails: ' ,{'style' : 'info'})
+			attachment = collect_results()
+			notify_email(config,hdfs_report,attachment)
+			clean_results(attachment)
+		else :
+			message ('Not sending out emails' ,{'style' : 'info'})
+	
+		manuf_runtime = time.time() - start_time
+		message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
 		
-	if opt_email:
-		message ('Sending out emails: ' ,{'style' : 'info'})
-		attachment = collect_results()
-		notify_email(config,hdfs_report,attachment)
-		clean_results(attachment)
-	else :
-		message ('Not sending out emails' ,{'style' : 'info'})
-
-	manuf_runtime = time.time() - start_time
-	message ('Manufacture Runtime: ' + str(datetime.timedelta(seconds=manuf_runtime)),	{'style' : 'info'})
-	if opt_colsanity :
+	if opt_colsanity is True or opt_colsanity_only is True :
 		checkColSanity(allvms)
 		attachment = collector_results()
 		notify_email(config,"Collector Sanity Report",attachment)
