@@ -268,7 +268,7 @@ def setupHDFS(tuples):
 
 def validate(config):
 	validator = Validator()
-	results = config.validate(validator)
+	results = config.validate(validator, preserve_errors=True)
 	if results != True:
 		for (section_list, key, _) in flatten_errors(config, results):
 			if key is not None:
