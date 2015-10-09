@@ -135,7 +135,6 @@ def centos_keygen(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Add Pub_keys from INI file = %s " % vm.addINIKeys()										, {'style': 'INFO'} )
 			message ( "Centos generate keys for root in %s = %s " %(vm_name, vm.centos_genkeys('root'))			, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
@@ -417,7 +416,6 @@ def shareKeys(tuples):
 		message ( "Now sharing pub-keys inside VM %s" % vm_name, {'style': 'INFO'} ) 
 		if vm.ssh_self():
 			message ( "RemoveAuthKeys_Output = %s " % vm.removeAuthKeys()		, {'style': 'INFO'} )
-			message ( "Add Pub_keys from INI file = %s " % vm.addINIKeys()		, {'style': 'INFO'} )
 			message ( "AuthPubKeys_Output = %s " % vm.authPubKeys()				, {'style': 'INFO'} )
 			message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
 		else:

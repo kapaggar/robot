@@ -105,7 +105,7 @@ class vm_node(object):
 	def authPubKeys(self):
 		output = ''
 		output += self._ssh_session.executeCli('ssh client global host-key-check no')
-		for creds in self.pub_keys:
+		for creds in sum([self.pub_keys , self._pub_keys] ,[]):
 			user,pubkey = creds.split(":")
 			if user == "root":
 				continue
@@ -294,7 +294,6 @@ keys /etc/ntp/keys
 		ssh_client_config = '''Host *
 CheckHostIP no
 ConnectionAttempts 1
-IdentityFile ~/.ssh/id_dsa
 KeepAlive yes
 PubkeyAuthentication yes
 StrictHostKeyChecking no
@@ -302,7 +301,7 @@ UsePrivilegedPort no
 UserKnownHostsFile /dev/null
 '''
 		output += self._ssh_session.executeShell('echo \"%s\" > ~%s/.ssh/config ' %(ssh_client_config,user))
-		for creds in self.pub_keys:
+		for creds in sum([self.pub_keys, self._pub_keys], []):
 			username,pubkey = creds.split(":")
 			if username != user:
 				continue
@@ -379,10 +378,11 @@ UserKnownHostsFile /dev/null
 		reflex_package_list = []
 		reflex_package_list.append('reflex-tm')
 		reflex_package_list.append('reflex-common')
-		reflex_package_list.append('hadoop')
+		reflex_package_list.append('reflex-hadoop')
 		reflex_package_list.append('reflex-tps')
 		if self.is_namenode():
 			reflex_package_list.append('reflex-collector')
+			reflex_package_list.append('reflex-hadoop-namenode')
 
 		output 	+= self._ssh_session.executeShell('yum clean all ')
 		for reflex_pkg in reflex_package_list:
