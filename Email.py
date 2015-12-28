@@ -185,7 +185,7 @@ if __name__ == "__main__":
     # Run some tests
     mFrom = "Automation User<kapil.aggarwal@guavus.com>"
     mTo = "kapil.aggarwal@guavus.com"
-    m = Email("mx1.guavus.com")
+    m = Email("smtp-relay.guavus.com")
     m.setFrom(mFrom)
     m.addRecipient(mTo)
     

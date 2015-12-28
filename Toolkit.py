@@ -284,7 +284,7 @@ def notify_email(config,msg,attachment=None):
 	email_msg 		= "\n\tlogfile and trace file for the run attached\n"
 	email_msg 		+= "\t==================\n"
 	email_msg		+= str(msg)
-	notify 			= Email("mx1.guavus.com")
+	notify 			= Email("smtp-relay.guavus.com")
 	notify.setFrom(notifyFrom)
 	for email_address in notifyTo:
 		notify.addRecipient(email_address)
