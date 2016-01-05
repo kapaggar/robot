@@ -106,7 +106,13 @@ class vm_node(object):
 		output = ''
 		output += self._ssh_session.executeCli('ssh client global host-key-check no')
 		for creds in sum([self.pub_keys , self._pub_keys] ,[]):
-			user,pubkey = creds.split(":")
+			if not creds:
+				continue
+			try :
+				user,pubkey = creds.split(":")
+			except Exception:
+				message ( 'check auth keys in INI %s' %(creds), {'style': 'ERROR'} )
+				continue
 			if user == "root":
 				continue
 			output += self._ssh_session.executeCli('ssh client user %s authorized-key sshv2 \"%s\"'%(user,pubkey))
@@ -302,7 +308,13 @@ UserKnownHostsFile /dev/null
 '''
 		output += self._ssh_session.executeShell('echo \"%s\" > ~%s/.ssh/config ' %(ssh_client_config,user))
 		for creds in sum([self.pub_keys, self._pub_keys], []):
-			username,pubkey = creds.split(":")
+			if not creds:
+				continue
+			try :
+				username,pubkey = creds.split(":")
+			except Exception:
+				message ( 'check auth keys in INI %s' %(creds), {'style': 'ERROR'} )
+				continue
 			if username != user:
 				continue
 			output += self._ssh_session.executeShell('echo \"%s\" >> ~%s/.ssh/authorized_keys ' %(pubkey,user))

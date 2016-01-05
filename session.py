@@ -334,7 +334,7 @@ class session(object):
 		lastline = ''
 		cmds = self._cmd_fix_input_data(cmd)
 		
-		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
+		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':0 , 'style': 'TRACE'})
 
 		for lines in cmds:
 			 self.write(lines)
@@ -372,13 +372,13 @@ class session(object):
 				if isinstance(prompt,re._pattern_type):
 					if prompt.match(lastline):
 						output = re.sub(prompt,'',output)
-						message ( "Ran Successfully \"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':1 , 'style': 'TRACE'})
+						message ( "Ran Successfully \"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':0 , 'style': 'TRACE'})
 						break
 				else:
 					if prompt in lastline:
 						break
 			else :
-				message ( "Prompt not responding, sending newline char",{'to_stdout':1, 'to_log':1 , 'style': 'TRACE'}) 	
+				message ( "Prompt not responding, sending newline char",{'to_stdout':1, 'to_log':0 , 'style': 'TRACE'}) 	
 				self.write("")
 		output.lstrip()
 		return output
