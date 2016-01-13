@@ -20,6 +20,7 @@ class Host(object):
 		self._release_ver		= self.config['HOSTS']['release_ver']
 		self._centos_template	= self.config['HOSTS']['centos_template_path']
 		self._template_file		= self.config['HOSTS'][self._name ]['template_file']
+		self._template_disk_size= self.config['HOSTS'][self._name ]['template_disk_size']
 		self._ip				= self.config['HOSTS'][self._name ]['ip']
 		self._username			= self.config['HOSTS'][self._name ]['username']
 		self._password			= self.config['HOSTS'][self._name ]['password']
@@ -47,7 +48,7 @@ class Host(object):
 		message ( "Making template from iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
 		iso_name = basename(iso_path)
 		try:
-			output +=  self._ssh_session.executeCli('_exec qemu-img create %s 100G' % self._template_file)
+			output +=  self._ssh_session.executeCli('_exec qemu-img create %s %sG' % (self._template_file,self._template_disk_size))
 			output +=  self._ssh_session.executeCli('virt vm template storage device drive-number 1 source file %s mode read-write' % template_name)
 			output +=  self._ssh_session.executeCli('virt vm template vcpus count 4')
 			output +=  self._ssh_session.executeCli('virt vm template memory 16384')
@@ -97,8 +98,23 @@ class Host(object):
 
 	def enableVirt(self):
 		output = ''
-		output += self._ssh_session.executeCli('virt enable',wait=5)
-		return output
+		virt_status = ''
+		virt_status = self._ssh_session.executeCli('internal query get - /virt/config/enable',wait=1)
+		if virt_status.find("true") != -1:
+			message ("Virtualisation already enabled", {'style':'OK'})
+			return "Success"
+
+		else :
+			message ("Enabling Virtualisation", {'style':'INFO'})
+			output += self._ssh_session.executeCli('virt enable',wait=5)
+			virt_status = self._ssh_session.executeCli('show virt configured')
+			output += virt_status
+			if virt_status.find("true") != -1:
+				message ("Virtualisation enabled now", {'style':'OK'})
+				return "Success"
+			else :
+				message ("Cannot enable virtualisation	", {'style':'FAIL'})
+				return "FAILED"
 
 	def getname(self):
 		return self._name

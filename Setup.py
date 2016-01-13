@@ -353,6 +353,38 @@ def get_allvms(config):
 					tuples.append(host_section + ":" + vm_section)
 	return tuples
 
+def get_datanodesvms(config):
+	tuples = []	
+	for host_section in config['HOSTS']:
+		if isinstance(config['HOSTS'][host_section], dict):
+			for vm_section in config['HOSTS'][host_section]:
+				if isinstance(config['HOSTS'][host_section][vm_section], dict):
+					DN_id = config['HOSTS'][host_section][vm_section]['data_node']
+					if DN_id :
+						tuples.append(host_section + ":" + vm_section)
+	return tuples
+
+def get_namenodesvms(config):
+	tuples = []	
+	for host_section in config['HOSTS']:
+		if isinstance(config['HOSTS'][host_section], dict):
+			for vm_section in config['HOSTS'][host_section]:
+				if isinstance(config['HOSTS'][host_section][vm_section], dict):
+					NN_id = config['HOSTS'][host_section][vm_section]['name_node']
+					if ( NN_id == 1 or NN_id == 2 ):
+						tuples.append(host_section + ":" + vm_section)
+	return tuples
+
+def get_rubixvms(config):
+	tuples = []	
+	for host_section in config['HOSTS']:
+		if isinstance(config['HOSTS'][host_section], dict):
+			for vm_section in config['HOSTS'][host_section]:
+				if isinstance(config['HOSTS'][host_section][vm_section], dict):
+					rubix_id = config['HOSTS'][host_section][vm_section]['rubix_node']
+					if rubix_id :
+						tuples.append(host_section + ":" + vm_section)
+	return tuples
 
 def manuf_VMs(host):
 	time.sleep(1)
@@ -449,6 +481,7 @@ def setupStorage(tuples):
 		if vm.ssh_self():
 			if vm.has_storage():
 				message ("Bring-Storage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
+				message ("Setup MPIO-Aliasing Output = [%s]" % vm.mpio_alias() ,			{'style': 'INFO'} )
 				if not opt_skip_format :
 					message ( "FormatStorage_Output = [%s]" % vm.format_storage() ,	{'style': 'INFO'} )
 				message ( "MountStorage_Output = [%s]" % vm.mount_storage(),			{'style': 'INFO'} )

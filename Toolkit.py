@@ -12,6 +12,7 @@ from colorama import Fore, Back, Style
 logfile_name	= ''
 tracefile_name	= ''
 result_file		= ''
+mail_body		= ''
 
 def append_to_trace(string_to_append):
 	"""
@@ -168,6 +169,9 @@ def get_system_date():
     now = time.strftime("%c")
     return now
 
+def get_exit_status():
+	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
+
 def get_startProcess(process):
 		if not process:
 			return False
@@ -242,11 +246,14 @@ def message(message_string,arg_ref):
 	'to_log' : 1,
 	'to_stdout' : 1,
 	'to_trace' : 1,
+	'to_email' : 1,
 	'style': 'NOK',    ok / nok / info / warning / debug / fatal
 	eg: message ( " log this in %s " % self._name, {'to_log': '1' ,'style': 'DEBUG'}  )
 	"""
 	if arg_ref.get('to_trace'): # If Tracing set .. only explicitly set options are treated
-		pass 
+		pass
+	elif arg_ref.get('to_mail'): # If Mail set .. only explicitly set options are treated. helps in formatting
+		pass
 	else: # If Tracing not set .. default logging to all targets
 		if not arg_ref.get('to_stdout'):
 			arg_ref['to_stdout'] = 1
@@ -254,6 +261,7 @@ def message(message_string,arg_ref):
 			arg_ref['to_log'] = 1
 		if not arg_ref.get('to_trace'):
 			arg_ref['to_trace'] = 1
+			
 
 	if arg_ref.get('style') and re.match("^ok$",arg_ref['style'], re.IGNORECASE):
 		message_string = sprintf_ok() +			message_string
@@ -261,7 +269,7 @@ def message(message_string,arg_ref):
 		message_string = sprintf_nok() +		message_string
 	elif arg_ref.get('style') and re.match("^info$",arg_ref['style'], re.IGNORECASE):
 		message_string = sprintf_info() +		message_string
-	elif arg_ref.get('style') and re.match("^warning$",arg_ref['style'], re.IGNORECASE):
+	elif arg_ref.get('style') and re.match("^warn",arg_ref['style'], re.IGNORECASE):
 		message_string = sprintf_warning() +	message_string
 	elif arg_ref.get('style') and re.match("^debug$",arg_ref['style'], re.IGNORECASE):
 		message_string = sprintf_debug() + 		message_string
@@ -273,6 +281,8 @@ def message(message_string,arg_ref):
 		message_string = sprintf_unknown() +	message_string
 	if arg_ref.get('to_stdout') and arg_ref['to_stdout']:
 		print message_string
+	if arg_ref.get('to_mail') and arg_ref['to_mail']:
+		mail_body.append(sprintf_nocolor(message_string))
 	if arg_ref.get('to_log') and arg_ref['to_log']:
 		append_to_log ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
@@ -281,7 +291,7 @@ def message(message_string,arg_ref):
 def notify_email(config,msg,attachment=None):
 	notifyFrom		= config['HOSTS']['notifyFrom']
 	notifyTo		= config['HOSTS']['notifyTo']
-	email_msg 		= "\n\tlogfile and trace file for the run attached\n"
+	email_msg 		= mail_body + "\n\tlogfile and trace file for the run attached\n"
 	email_msg 		+= "\t==================\n"
 	email_msg		+= str(msg)
 	notify 			= Email("smtp-relay.guavus.com")

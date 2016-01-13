@@ -15,6 +15,8 @@ class vm_node(object):
 	name_nodes = []
 	journal_nodes = []
 	data_nodes = []
+	rubix_nodes = []
+	insta_nodes = []
 	re_ssh_pubkey = re.compile( r"^(?P<pubkey>ssh-dss\s+\S+)",re.M)
 
 	def __init__(self,config,host,vm):
@@ -43,10 +45,13 @@ class vm_node(object):
 		self._namenode				= config['HOSTS'][host][vm]['name_node']
 		self._journalnode			= config['HOSTS'][host][vm]['journal_node']
 		self._datanode				= config['HOSTS'][host][vm]['data_node']
+		self._rubixnode				= config['HOSTS'][host][vm]['rubix_node']
+		self._instanode				= config['HOSTS'][host][vm]['insta_node']
 		self._initiatorname_iscsi	= config['HOSTS'][host][vm]['storage']['initiatorname_iscsi']
 		self._iscsi_target			= config['HOSTS'][host][vm]['storage']['iscsi_target']
 		self._forbidden_nodes		= config['HOSTS'][host][vm]['storage']['forbidden_nodes']
 		self._tps_fs				= config['HOSTS'][host][vm]['tps-fs']
+		self._mpio_alias			= config['HOSTS'][host][vm]['multipath-alias']
 		self._cluster_name			= config['HOSTS'][host][vm]['cluster_name']
 		self._mgmtNic				= config['HOSTS'][host][vm]['mgmtNic']
 		self._storNic				= config['HOSTS'][host][vm]['storNic']
@@ -67,11 +72,13 @@ class vm_node(object):
 			self.registerNameNode()
 		elif self._journalnode:
 			self.registerJournalNode()
-		else :
+		elif self._datanode:
 			self.registerDataNode()
-		if self._datanode:
-			self.registerDataNode()
-
+		elif self._rubixnode:
+			self.registerRubixNode()
+		elif self._instanode:
+			self.registerInstaNode()
+			
 	def __del__(self):
 		if self._ssh_session != None:
 			self._ssh_session.close()
@@ -126,10 +133,11 @@ class vm_node(object):
 		if self._forbidden_nodes:
 			output += self.remove_iscsiForbidden()
 		output += self._ssh_session.executeCli('tps iscsi restart')
-		time.sleep(15)
+		time.sleep(10)
 		output += self._ssh_session.executeCli('tps multipath renew ')
+		
 		return output
-	
+
 	def centos_bring_storage(self):
 		output = ''
 		response = ''
@@ -583,6 +591,40 @@ UserKnownHostsFile /dev/null
 		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
 		return output
 
+	def mpio_alias(self):
+		output = 'SUCCESS'
+		for alias in self._mpio_alias.keys():
+			if not alias:
+				break
+			wwid = self._mpio_alias[alias]
+			if not wwid :
+				continue
+			if isinstance(wwid, basestring):
+				wwid = self._mpio_alias[alias].lower()
+			else:
+				message ( "Correct wwid %s for alias %s " % (wwid,alias),{'style': 'ERROR'}  )
+				
+			message ( "Aliasing %s on %s" % (wwid,alias),{'to_trace': '1' ,'style': 'TRACE'}  )
+			count = 10
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeCli('tps multipath show')
+				message ( "Current multipaths on %s = %s" % (self._name,current_multipaths),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
+				if wwid in current_multipaths:
+					full_output =  self._ssh_session.executeCli('mpio multipaths alias %s wwid %s' % (alias,wwid),wait=30)
+					message ( 'mpio multipaths alias %s wwid %s output = %s' % (alias,wwid,full_output),{'to_trace': '1' ,'style': 'WARN'} )
+					output += full_output.splitlines()[-1]
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeCli('tps multipath show')
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (alias,wwid),{'style': 'WARN'} )
+					time.sleep(1)
+					continue
+			if count == 0:
+				output = 'FAIL'
+		return output
+			
 	def format_storage(self):
 		output = ''
 		format_option = ""
@@ -592,8 +634,9 @@ UserKnownHostsFile /dev/null
 			message ( "Forcing format on %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 			
 		for fs_name in self._tps_fs.keys():
+			mount_point = self._tps_fs[fs_name]['mount-point']
 			ini_format_option = self._tps_fs[fs_name]['format']
-			if ini_format_option is False:
+			if ( global_format_forced is False and ini_format_option is False ):
 				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
 				continue
 			
@@ -604,14 +647,22 @@ UserKnownHostsFile /dev/null
 				message ( "Current multipaths =  %s on %s" % (current_multipaths,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
 				#output += current_multipaths 
 				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
-					output += full_output.splitlines()[-1]
-					break
+					if bool(mount_point) and mount_point == 'insta':
+						if self.is_instanode() and self.is_clustermaster():
+							full_output =  self._ssh_session.executeCli('_exec mkfs.ext2 -i 65536 -b 4096 -L %s -v /dev/mapper/%s' % (fs_name,fs_name),wait=30)
+							output += full_output.splitlines()[-1]
+							break
+						else :
+							message ( "Skipping insta LUN %s format on %s" % (fs_name,self._name),{'style': 'INFO'}  )
+							break
+					else:
+						full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
+						output += full_output.splitlines()[-1]
+						break
 				elif wwid not in current_multipaths:
 					count = count - 1
 					output += self._ssh_session.executeCli('tps multipath show')
-					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (fs_name,wwid),
-							 {'style': 'INFO'} )
+					message ( " %s lun with wwid=%s still not in multipath. retrying in 1 sec" % (fs_name,wwid),{'style': 'INFO'} )
 					time.sleep(1)
 					continue
 		return output
@@ -633,6 +684,11 @@ UserKnownHostsFile /dev/null
 
 	def gen_dsakey(self):
 		output = ''
+		if self._namenode or self._rubixnode or self._instanode:
+			pass
+		else :
+			return "Not Generating keys in DataNode"
+		
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
 			if user == "root":
@@ -682,9 +738,9 @@ UserKnownHostsFile /dev/null
 			output += self._ssh_session.executeCli("cli session terminal width 999")
 			output += self._ssh_session.executeCli('_exec /bin/ps -eo etime,args')
 		return output
-
-	def hostid_generator(self):
-		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
+	
+	def has_storage(self):
+		return self._initiatorname_iscsi
 
 	def hdfs_report(self):
 		output = ''
@@ -703,8 +759,8 @@ UserKnownHostsFile /dev/null
 		except Exception:
 			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
 
-	def has_storage(self):
-		return self._initiatorname_iscsi
+	def hostid_generator(self):
+		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
 
 	def is_clusternode(self):
 		if self._clusterVIP is not None:
@@ -715,6 +771,30 @@ UserKnownHostsFile /dev/null
 	def is_namenode(self):
 		if self._namenode:
 			return self._namenode
+		else:
+			return False
+
+	def is_datanode(self):
+		if self._datanode:
+			return self._datanode
+		else:
+			return False
+
+	def is_namenode(self):
+		if self._namenode:
+			return self._namenode
+		else:
+			return False
+
+	def is_journalnode(self):
+		if self._journalnode:
+			return self._journalnode
+		else:
+			return False
+
+	def is_instanode(self):
+		if self._instanode:
+			return self._instanode
 		else:
 			return False
 
@@ -787,6 +867,8 @@ UserKnownHostsFile /dev/null
 		for fs_name in self._tps_fs.keys():
 			wwid = self._tps_fs[fs_name]['wwid'].lower()
 			mount_point = self._tps_fs[fs_name]['mount-point']
+			if mount_point == 'no' or mount_point == 'insta':
+				return
 			output +=  self._ssh_session.executeCli('no tps fs %s enable' %(fs_name))
 			output +=  self._ssh_session.executeCli('no tps fs %s ' %(fs_name))
 			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
@@ -873,21 +955,29 @@ UserKnownHostsFile /dev/null
 						continue
 					message ("iScsi node %s not present in the system " % ip_port,{'style':'OK'})
 			else :
-				message ("No nodes present currently in system %s" % ip_port,{'style':'OK'})
+				message ("No iscsi nodes present currently in system" ,{'style':'OK'})
 				
 		return "Success"	
 
 	def registerNameNode(self):
 		self.name_nodes.append(self._name)
-		message ( "registerNameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		message ( "register NameNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 
 	def registerDataNode(self):
 		self.data_nodes.append(self._name)
-		message ( "registerDataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		message ( "register DataNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 	
 	def registerJournalNode(self):
 		self.journal_nodes.append(self._name)
-		message ( "registerJournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		message ( "register JournalNode %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		
+	def registerRubixNode(self):
+		self.rubix_nodes.append(self._name)
+		message ( "register Rubix Node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+
+	def registerInstaNode(self):
+		self.insta_nodes.append(self._name)
+		message ( "register Insta Node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 
 	def rotate_logs(self):
 		output = ''
