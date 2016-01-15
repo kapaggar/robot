@@ -1,9 +1,10 @@
 import re
-import os, sys
+import os, sys	
 import unicodedata
 import time
 import signal
 import tarfile
+import HTML
 import __main__ as main
 from urlgrabber import urlopen,grabber
 from Email import Email
@@ -13,6 +14,40 @@ logfile_name	= ''
 tracefile_name	= ''
 result_file		= ''
 mail_body		= ''
+test_status = {'SUCCESS':0,'FAILURE':0,'ERROR':0,'SKIPPED':0}
+test_table = {}
+test_count = 0
+
+def _get_exit_status():
+	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
+
+def _rc_severity(status):
+	return_code_severity = get_exit_status()
+	return return_code_severity.get(status) and return_code_severity[status]
+
+def add_skipped():
+	test_status['SKIPPED'] +=1
+
+def add_success():
+	test_status['SUCCESS'] +=1
+
+def add_failure():
+	test_status['FAILURE'] +=1
+
+def add_error():
+	test_status['ERROR'] +=1
+
+def get_skipped():
+	return int(test_status['SKIPPED'])
+
+def get_success():
+	return int(test_status['SUCCESS'])
+
+def get_failure():
+	return int(test_status['FAILURE'])
+
+def get_error():
+	return int(test_status['ERROR'])
 
 def append_to_trace(string_to_append):
 	"""
@@ -151,6 +186,16 @@ def collector_results():
 		message("Unable to make tar for writing",{'style':'FATAL'})
 		return False
 
+def display_testresults():
+	from prettytable import from_html
+	pretty_str = ''
+	for pretty_table in from_html(premailer()):
+		pretty_str += str(pretty_table)
+		pretty_str +=  "\n"
+		pretty_str +=  '='*40
+		pretty_str +=  "\n"
+	return pretty_str
+
 def get_nightly(base_path):
 	re_mfgiso = re.compile( r"(?P<mfgiso>mfgcd-\S+?.iso)",re.M)
 	try:
@@ -169,9 +214,19 @@ def get_system_date():
     now = time.strftime("%c")
     return now
 
-def get_exit_status():
-	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
+def get_rc_skipped():
+	return 'SKIPPED'
 
+def get_rc_ok():
+	return 'SUCCESS'
+
+def get_rc_nok():
+	return 'FAIL'
+	
+def get_rc_error():
+	return 'ERROR'
+	
+	
 def get_startProcess(process):
 		if not process:
 			return False
@@ -282,24 +337,76 @@ def message(message_string,arg_ref):
 	if arg_ref.get('to_stdout') and arg_ref['to_stdout']:
 		print message_string
 	if arg_ref.get('to_mail') and arg_ref['to_mail']:
-		mail_body.append(sprintf_nocolor(message_string))
+		premailer(sprintf_nocolor(message_string))
 	if arg_ref.get('to_log') and arg_ref['to_log']:
 		append_to_log ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
 		append_to_trace ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
+	
+def record_status(test_string,mystatus):
+	"""
+	'status': 'success',    success / fail / skipped / error 
+	eg: record_status ( " Test Case %s ." % self._name, {'status': 'success'}  )
+	"""
+	if not test_string:
+		return
+	if not mystatus:
+		return
+	status = mystatus.upper()
+	most_severe_status = test_table.get(test_string,None)
+	if most_severe_status and status != most_severe_status:
+		my_severity = _rc_severity(status)
+		older_severity = _rc_severity(test_table[test_string])
+		if (my_severity < older_severity):
+			return
+
+	if re.match("^success$",status, re.IGNORECASE):
+		add_success()
+	elif re.match("^fail$",status, re.IGNORECASE):
+		add_failure()
+	elif re.match("^skipped$",status, re.IGNORECASE):
+		add_skipped()
+	elif re.match("^error$",status, re.IGNORECASE):
+		add_error()
+	else:
+		add_success()
+	test_table[test_string] = status.upper()
+	return status.upper()
+
+def premailer():
+	result_colors = {
+		'SUCCESS':      'lime',
+		'FAILURE':      'red',
+		'ERROR':        'yellow',
+		'SKIPPED':      'silver',
+	}
+	myTable = HTML.Table(header_row=['Test Executed', 'Results'])
+	for test_id in test_table:
+		color = result_colors[test_table[test_id]]
+		colored_result = HTML.TableCell(test_table[test_id], bgcolor=color)
+		myTable.rows.append([test_id, colored_result])
+	
+	return myTable
+
+	mySummary = HTML.Table(header_row=['Total','Skipped','Success', 'Failed','Error'])
+	mySummary.rows.append([stats_values(),get_skipped(),get_success(),get_failure(),get_error()])
+	saperator = '<br>\n'+'<br>\n'
+	combined_tables_reprt = str(myTable) + saperator  + str (mySummary)
+	return combined_tables_reprt
 
 def notify_email(config,msg,attachment=None):
 	notifyFrom		= config['HOSTS']['notifyFrom']
 	notifyTo		= config['HOSTS']['notifyTo']
-	email_msg 		= mail_body + "\n\tlogfile and trace file for the run attached\n"
-	email_msg 		+= "\t==================\n"
+	email_msg		= premailer()
+	email_msg 		+= "\n\tlogfile and trace file for the run attached\n"
+	email_msg 		+= "\n\t==================\n"
 	email_msg		+= str(msg)
 	notify 			= Email("smtp-relay.guavus.com")
 	notify.setFrom(notifyFrom)
 	for email_address in notifyTo:
 		notify.addRecipient(email_address)
 	notify.setSubject("Hubrix notification")
-	notify.setTextBody(email_msg)
+	notify.setHtmlBody(email_msg)
 	if attachment:
 		notify.addAttachment(attachment)
 	notify.send()
@@ -344,12 +451,18 @@ def sprintf_nocolor(string):
     regex = re.compile(ur'\x1B\[([0-9]{0,2}(;[0-9]{0,2})?)?[m|K]', re.UNICODE)
     return re.sub(regex,"", string)
 
+def stats_values():
+	return sum(test_status.values())
+
 def terminate_self(mesg):
-    if mesg :
-        message ("%s"%mesg, {'style':'nok'} )
-    else:
-        message ("Killing Self", {'style':'nok'} )
-    os.kill(os.getpid(), signal.SIGTERM)
+	try:
+		if mesg :
+			message ("%s"%mesg, {'style':'nok'} )
+		else:
+			message ("Killing Self", {'style':'nok'} )
+		os.kill(os.getpid(), signal.SIGTERM)
+	except Exception:
+		sys.exit()
 
 def write_to_file(file_name,string_to_write):
     try:

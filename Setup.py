@@ -11,7 +11,7 @@ from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message,notify_email,terminate_self,collect_results,collector_results,clean_results,check_iso_exists
+from Toolkit import *
 from pprint import pprint
 
 hosts = list()
@@ -269,14 +269,17 @@ def connect_hosts (hosts):
 def do_manufacture(hosts):
 	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
 	threads = []
-	for host_name in hosts:
-			host = config['HOSTS'][host_name]['host_ref']
-			newThread = threading.Thread(target=manuf_VMs, args = (host,))
-			newThread.setDaemon(True)
-			newThread.start()
-			threads.append(newThread)
-	for thread in threads:
-			thread.join()
+	try :
+		for host_name in hosts:
+				host = config['HOSTS'][host_name]['host_ref']
+				newThread = threading.Thread(target=manuf_VMs, args = (host,))
+				newThread.setDaemon(True)
+				newThread.start()
+				threads.append(newThread)
+		for thread in threads:
+				thread.join()
+	except Exception:
+		record_status("Manufacturing with iso %s" %(iso_name),"ERROR")
 	return "Success"
 
 def do_centosInstall(hosts):
@@ -387,18 +390,20 @@ def get_rubixvms(config):
 	return tuples
 
 def manuf_VMs(host):
-	time.sleep(1)
 	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
 	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
 	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
 	message (  "HostMapping_Output = [%s] " % host.vmHostMaps()			,{'style': 'INFO'} )
 	if opt_lazy:
 		if host.is_template_present():
-			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} ) 
+			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} )
+			record_status("Manufacturing with ISO",get_rc_skipped())
+			return get_rc_skipped()
 		else :
 			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
+			record_status("Manufacturing with ISO",get_rc_error())
 			terminate_self("Template missing in host %s" % host.getname())
-			return "Failure"
+			return get_rc_error()
 	else:
 		message (  "GetMfgISO_Output = [%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
 		message (  "Delete-Template_Output = [%s]"	% host.delete_template()	,{'style': 'INFO'} )
@@ -407,7 +412,7 @@ def manuf_VMs(host):
 	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
 	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
 	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
-	return "Success"
+	return get_rc_ok()
 
 def manuf_Centos_VMs(host):
 	time.sleep(1)
@@ -711,7 +716,7 @@ if __name__ == '__main__':
 
 	allvms = get_allvms(config)
 	objectify_vms(allvms)
-	#terminate_self("Exiting")
+	####terminate_self("Exiting")
 	if not opt_colsanity_only and not opt_rpm:
 		basic_settings(allvms)
 		generate_keys(allvms)
@@ -767,6 +772,7 @@ if __name__ == '__main__':
 		do_upgrade()
 
 	total_runtime = time.time() - start_time
+	message ('Summary Execution: \n%s'%(display_testresults()),{'style' : 'info'})
 	message ('Total Runtime: ' + str(datetime.timedelta(seconds=total_runtime)),		{'style' : 'info'})
 
 	message("-- Script Finished Execution --", { 'style':'ok' } )

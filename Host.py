@@ -2,7 +2,7 @@
 import re
 from session import session
 from vm_node import vm_node
-from Toolkit import message,terminate_self,get_nightly
+from Toolkit import *
 from os.path import basename
 
 ######################################################
@@ -60,10 +60,14 @@ class Host(object):
 			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=12288/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
 			output +=  self._ssh_session.run_till_prompt(manufacture_cmd,"my_PROMPT",wait=60)
 			output +=  self._ssh_session.run_till_prompt('reboot')
+			message ( "Manufacturing Log for %s \n %s" % (self._name,output),{'style': 'INFO'}  )
+			record_status("Manufacturing with iso %s" %(iso_name),"SUCCESS")
+			return get_rc_ok()
 		except Exception:
-			message ( "Template creation failed  %s " % self._name,{'style': 'FATAL'}  )
+			message ( "DiskTemplate creation failed in %s " % self._name,{'style': 'FATAL'}  )
 			output = output + " Failed "
-		return output
+			record_status("Manufacturing with iso %s" %(iso_name),"ERROR")
+		return get_rc_error()
 
 	def deleteVMs(self):
 		output = ''
@@ -261,8 +265,12 @@ class Host(object):
 	
 	def startVMs(self):
 		for vm_name in self._vms:
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "VM-Poweron = [%s]" % vm.power_on()					, {'style': 'INFO'} )
+			try:
+				vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
+				message ( "VM-Poweron = [%s]" % vm.power_on()					, {'style': 'INFO'} )
+			except Exception :
+				return get_rc_error()
+		return get_rc_ok()
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
@@ -275,10 +283,13 @@ class Host(object):
 	def vmHostMaps(self):
 		output = ''
 		output += self._ssh_session.executeCli('ssh client global host-key-check no' )
-		for vm_name in self._vms:
-			vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
-			output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
-		return output + "Success"
+		try:
+			for vm_name in self._vms:
+				vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
+				output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
+				return get_rc_ok()
+		except Exception:
+			return get_rc_error()
 
 	def wipe_setup(self):
 		output = ''

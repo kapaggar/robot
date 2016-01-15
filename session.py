@@ -9,7 +9,7 @@ import os,sys
 import random
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message , terminate_self
+from Toolkit import *
 
 
 class session(object):
@@ -463,7 +463,7 @@ class session(object):
 					return
 				else:
 					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'info'}  )
-		except:
+		except Exception:
 			message ( "NEW %s" % os.path.basename(fname),  {'style': 'info'}  )
 
 		if not is_up_to_date:

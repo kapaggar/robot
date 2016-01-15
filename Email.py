@@ -183,6 +183,30 @@ class Email:
     
 if __name__ == "__main__":
     # Run some tests
+    import HTML
+    test_results = {
+        'test 1': 'success',
+        'test 2': 'failure',
+        'test 3': 'success',
+        'test 4': 'error',
+        'test 5': 'skipped'
+    }
+    result_colors = {
+        'success':      'lime',
+        'failure':      'red',
+        'error':        'yellow',
+        'skipped':      'silver',
+    }
+    myTable = HTML.Table(header_row=['Test', 'Result'])
+    for test_id in sorted(test_results):
+        # create the colored cell:
+        color = result_colors[test_results[test_id]]
+        colored_result = HTML.TableCell(test_results[test_id], bgcolor=color)
+        # append the row with two cells:
+        myTable.rows.append([test_id, colored_result])
+    
+    htmlcode = str(myTable)
+
     mFrom = "Automation User<kapil.aggarwal@guavus.com>"
     mTo = "kapil.aggarwal@guavus.com"
     m = Email("smtp-relay.guavus.com")
@@ -191,9 +215,10 @@ if __name__ == "__main__":
     
     # Simple Plain Text + html Email
     m.setSubject("Testing automation mail sending framework")
-    m.setTextBody("This is a plain text email <b>I should not be bold</b>")
+    m.setTextBody("This is a plain text email <b>It should not be bold</b>")
     m.setHtmlBody("The following should be <b>bold</b>")
-    m.addAttachment("/tmp/xz.cpio")
+    m.setHtmlBody(htmlcode)
+    m.addAttachment("/proc/version")
     m.send()
 
     ## Text + HTML

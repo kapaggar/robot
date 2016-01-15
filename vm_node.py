@@ -7,7 +7,7 @@ import commands
 import os,sys
 import random
 from session import session
-from Toolkit import message,terminate_self,clear_collector_logs,get_startProcess
+from Toolkit import *
 
 class vm_node(object):
 	nodes_ip = {}
@@ -390,7 +390,11 @@ UserKnownHostsFile /dev/null
 		output = ''
 		for vm in self.nodes_ip.keys():
 			output += self._ssh_session.executeShell('grep -q %s /etc/hosts && sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts || echo \"%s %s\" >> /etc/hosts' %(vm, self.nodes_ip[vm],self.nodes_ip[vm],vm, self.nodes_ip[vm],vm))
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def centos_install_reflex(self):
 		output = ''
@@ -477,7 +481,11 @@ UserKnownHostsFile /dev/null
 	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
 		message ( "cloned volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def col_basic(self):
 		output = ''
@@ -528,25 +536,40 @@ UserKnownHostsFile /dev/null
 	def config_write(self):
 		output = ''
 		output += self._ssh_session.executeCli('config write')
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def config_ntp(self):
 		output = ''
 		output += self._ssh_session.executeCli('ntpdate  %s' % self._ntpserver)
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntpserver)
 		output += self._ssh_session.executeCli('ntp enable ')
-		return output
+		if "adjust time server" in output:
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def config_dns(self):
 		output = ''
 		output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def configusers(self):
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
-			self.set_user(user,password)
-		
+			try:
+				self.set_user(user,password)
+			except Exception:
+				record_status("User config error %s" %(user),get_rc_nok())
+		return record_status("User configuration",get_rc_ok())
+
 	def delete_iscsiNode(self,ip_port):
 		output = ''
 		if not ip_port :
@@ -588,7 +611,11 @@ UserKnownHostsFile /dev/null
 	
 	def factory_revert(self):
 		output = ''
-		output += self._ssh_session.executeCli('configuration revert factory',wait=10)
+		try:
+			output += self._ssh_session.executeCli('configuration revert factory',wait=10)
+			
+		except Exception as e:
+			record_status("Factory revert error in %s = %s \n %s" %(self._name,output,str(e)),"ERROR")
 		return output
 
 	def mpio_alias(self):
@@ -825,7 +852,11 @@ UserKnownHostsFile /dev/null
 	def install_license(self):
 		output = ''
 		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def is_ResManUp(self):
 		response = self.get_psef()
@@ -874,7 +905,10 @@ UserKnownHostsFile /dev/null
 			output +=  self._ssh_session.executeCli('tps fs %s wwid %s' %(fs_name,wwid))
 			output +=  self._ssh_session.executeCli('tps fs %s mount-point %s' %(fs_name,mount_point))
 			output +=  self._ssh_session.executeCli('tps fs %s enable' %(fs_name))
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 	
 	def pingable(self,host):  
 		try:
@@ -892,7 +926,10 @@ UserKnownHostsFile /dev/null
 	def power_on(self):
 		output = ''
 		output += self._host_ssh_session.executeCli('virt vm %s power on' % self._name )
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def power_off(self):
 		output = ''
@@ -922,13 +959,19 @@ UserKnownHostsFile /dev/null
 		time.sleep(10)
 		for fs_name in self._tps_fs.keys():
 			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def reload(self):
 		output = ''
 		output += self._ssh_session.executeCli('config write')
 		output += self._ssh_session.executeCli('reload')
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def remove_iscsiForbidden(self):
 		output = ''
@@ -957,7 +1000,7 @@ UserKnownHostsFile /dev/null
 			else :
 				message ("No iscsi nodes present currently in system" ,{'style':'OK'})
 				
-		return "Success"	
+		return get_rc_ok()	
 
 	def registerNameNode(self):
 		self.name_nodes.append(self._name)
@@ -982,29 +1025,47 @@ UserKnownHostsFile /dev/null
 	def rotate_logs(self):
 		output = ''
 		output += self._ssh_session.executeCli('logging files rotation force')
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def setSnmpServer(self):
 		output = ''
 		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def setHostName(self):
 		output = ''
 		output += self._ssh_session.executeCli('hostname %s' % self._name )
 		output += self._ssh_session.executeCli('config write')
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def set_snmpsink(self):
 		output = ''
 		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c '%self._snmpsink)
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 	
 	def setIpHostMaps(self):
 		output = ''
 		for vm in self.nodes_ip.keys():
 			output += self._ssh_session.executeCli('ip host %s %s '%(vm,self.nodes_ip[vm]))
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 	
 	def setclustering(self):
 		output = ''
@@ -1024,8 +1085,12 @@ UserKnownHostsFile /dev/null
 		if self._stor_ip is not None:
 			output += self._ssh_session.executeCli('no interface %s ip address' %self._storNic)
 			output += self._ssh_session.executeCli('interface %s ip address %s /%s' %(self._storNic, self._stor_ip, self._stor_mask))
-		return output
-	
+		if not output and output.isspace():
+			return get_rc_ok()
+		else:
+			message ( "Configure storage network =[%s] "%(output),{'style': 'NOK'}  )
+			return record_status("Configure storage network",get_rc_error())
+
 	def setup_HDFS(self):
 		HA =''
 		journal_nodes = ''
@@ -1144,7 +1209,11 @@ HOSTNAME=%s
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
 		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
-		return output
+		if output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
+
 
 	def set_mfgdb(self):
 		output = ''
