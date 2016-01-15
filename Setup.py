@@ -20,7 +20,7 @@ hdfs_report = ''
 def basic_settings(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'style': 'INFO'} )
+		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'to_log':'0','style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
@@ -731,7 +731,7 @@ if __name__ == '__main__':
 			setupHDFS(allvms)
 			hdfs_report = checkHDFS(allvms)
 			config_collector(allvms)
-	
+		
 	if opt_rpm:
 		centos_sync_basic_settings(allvms)
 		centos_keygen(allvms)

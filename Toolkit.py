@@ -385,14 +385,10 @@ def premailer():
 		color = result_colors[test_table[test_id]]
 		colored_result = HTML.TableCell(test_table[test_id], bgcolor=color)
 		myTable.rows.append([test_id, colored_result])
-	
-	return myTable
 
 	mySummary = HTML.Table(header_row=['Total','Skipped','Success', 'Failed','Error'])
 	mySummary.rows.append([stats_values(),get_skipped(),get_success(),get_failure(),get_error()])
-	saperator = '<br>\n'+'<br>\n'
-	combined_tables_reprt = str(myTable) + saperator  + str (mySummary)
-	return combined_tables_reprt
+	return str(myTable) + str (mySummary)
 
 def notify_email(config,msg,attachment=None):
 	notifyFrom		= config['HOSTS']['notifyFrom']

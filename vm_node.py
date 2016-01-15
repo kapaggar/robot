@@ -1085,7 +1085,7 @@ UserKnownHostsFile /dev/null
 		if self._stor_ip is not None:
 			output += self._ssh_session.executeCli('no interface %s ip address' %self._storNic)
 			output += self._ssh_session.executeCli('interface %s ip address %s /%s' %(self._storNic, self._stor_ip, self._stor_mask))
-		if not output and output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			message ( "Configure storage network =[%s] "%(output),{'style': 'NOK'}  )
