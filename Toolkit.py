@@ -10,6 +10,10 @@ from urlgrabber import urlopen,grabber
 from Email import Email
 from colorama import Fore, Back, Style
 
+__all__ =  ['clean_results','collect_results','clear_collector_logs','collector_results','display_testresults','get_nightly',
+			'get_rc_skipped','get_rc_ok','get_rc_nok','get_rc_error','check_iso_exists','get_system_date','get_startProcess',
+			'message','record_status','premailer','notify_email','terminate_self']
+
 logfile_name	= ''
 tracefile_name	= ''
 result_file		= ''
@@ -17,6 +21,7 @@ mail_body		= ''
 test_status = {'SUCCESS':0,'FAILURE':0,'ERROR':0,'SKIPPED':0}
 test_table = {}
 test_count = 0
+mail_report_buffer = {}
 
 def _get_exit_status():
 	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
@@ -89,13 +94,24 @@ def append_to_log(string_to_append):
 	append_to_file(logfile_name,string_to_append)
 
 def append_to_file(logfile_name,string_to_append):
-    try:
-        with open(logfile_name, "a") as logfile:
-            logfile.write(string_to_append)
-            logfile.close()
-    except IOError:
-        with open(logfile_name, "w+") as logfile:
-            logfile.write(string_to_append)
+	try:
+		with open(logfile_name, "a") as logfile:
+			logfile.write(string_to_append)
+			logfile.close()
+	except IOError:
+		with open(logfile_name, "w+") as logfile:
+			logfile.write(string_to_append)
+	except Exception, err:
+		print ("Unable to write to file %s"%(logfile_name,str(err)))
+		terminate_self()
+
+def append_to_mail(header,string_to_append):
+	if not header :
+		header = 'footnote'
+	try:
+		mail_report_buffer[header] = string_to_append
+	except Exception, err:
+		print ("Unable to add to mail buffer %s"%str(err))
 
 def check_iso_exists(config):
 	_iso_path	= config['HOSTS']['iso_path']
@@ -337,7 +353,7 @@ def message(message_string,arg_ref):
 	if arg_ref.get('to_stdout') and arg_ref['to_stdout']:
 		print message_string
 	if arg_ref.get('to_mail') and arg_ref['to_mail']:
-		premailer(sprintf_nocolor(message_string))
+		append_to_mail(sprintf_nocolor(message_string))
 	if arg_ref.get('to_log') and arg_ref['to_log']:
 		append_to_log ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
@@ -450,7 +466,7 @@ def sprintf_nocolor(string):
 def stats_values():
 	return sum(test_status.values())
 
-def terminate_self(mesg):
+def terminate_self(mesg=None):
 	try:
 		if mesg :
 			message ("%s"%mesg, {'style':'nok'} )

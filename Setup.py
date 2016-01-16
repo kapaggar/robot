@@ -16,6 +16,7 @@ from pprint import pprint
 
 hosts = list()
 hdfs_report = ''
+setup_yarn_info =''
 
 def basic_settings(tuples):
 	for line in tuples:
@@ -190,7 +191,7 @@ def centos_setupHDFS(tuples):
 def centos_setupClusters(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting clusters inside VM %s" % vm_name, {'style': 'INFO'} )
+		message ( "Now setting clusters inside VM %s" % vm_name, {'style': 'debug'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.is_clusternode():
@@ -215,6 +216,22 @@ def clear_ha(tuples):
 			vm.unregisterCluster()
 	return "Success"
 
+def collect_yarn_setup_info(tuples):
+	output = ''
+	for line in tuples:
+		host,vm_name = line.split(":")
+		message ( "Now checking yarn info inside VM %s" % vm_name,{'style': 'INFO'} )
+		vm = config['HOSTS'][host][vm_name]['vm_ref']
+		if vm.is_namenode():
+			if vm.ssh_self():
+				response = vm.get_yarn_info()
+				if response:
+					message ("Check-yarn Info = [%s]" % response,{'style': 'INFO'} )
+					output += response
+			else:
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+	return output
+
 def checkHDFS(tuples):
 	output = ''
 	for line in tuples:
@@ -224,8 +241,9 @@ def checkHDFS(tuples):
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.validate_HDFS()
-				message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
-				output += response
+				if response:
+					message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+					output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 	return output
@@ -316,7 +334,7 @@ def exit_cleanup(signal, frame):
 						vm_ref = config['HOSTS'][host][vm]['vm_ref']
 						del vm_ref
 					except Exception:
-						message( "VM reference %s already clean"% vm , { 'to_log':1 } )
+						message( "VM reference %s already clean"% vm , { 'to_log':1 ,'style': 'OK'} )
 				try:
 					del config['HOSTS'][host_name]['host_ref']
 					break
@@ -481,12 +499,12 @@ def setupClusters(tuples):
 def setupStorage(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up storage inside VM %s" % vm_name, {'style': 'INFO'} )
+		message ( "Now setting up storage inside VM %s" % vm_name, {'style': 'debug'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.has_storage():
 				message ("Bring-Storage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
-				message ("Setup MPIO-Aliasing Output = [%s]" % vm.mpio_alias() ,			{'style': 'INFO'} )
+				message ("Setup MPIO-Aliasing Output = %s" % vm.mpio_alias() ,			{'style': 'INFO'} )
 				if not opt_skip_format :
 					message ( "FormatStorage_Output = [%s]" % vm.format_storage() ,	{'style': 'INFO'} )
 				message ( "MountStorage_Output = [%s]" % vm.mount_storage(),			{'style': 'INFO'} )
@@ -729,6 +747,7 @@ if __name__ == '__main__':
 			setupStorage(allvms)
 		if opt_hdfs is True:
 			setupHDFS(allvms)
+			setup_yarn_info = collect_yarn_setup_info(allvms)
 			hdfs_report = checkHDFS(allvms)
 			config_collector(allvms)
 		
@@ -750,12 +769,15 @@ if __name__ == '__main__':
 		if opt_hdfs is True:
 			centos_setupHDFS(allvms)
 			hdfs_report = centos_checkHDFS(allvms)
+			setup_yarn_info = collect_yarn_setup_info(allvms)
 			config_collector(allvms)
 
 	if opt_email:
 		message ('Sending out emails: ' ,{'style' : 'info'})
 		attachment = collect_results()
-		notify_email(config,hdfs_report,attachment)
+		hdfs_html_report = HTML.table(header_row=['hdfs dfsadmin report'])
+		hdfs_html_report.append(setup_yarn_info)
+		notify_email(config,str(hdfs_html_report),attachment)
 		clean_results(attachment)
 	else :
 		message ('Not sending out emails' ,{'style' : 'info'})

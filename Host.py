@@ -249,19 +249,18 @@ class Host(object):
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
 		output += self._ssh_session.executeCli('ntp enable ')
 		if output.find("adjust") != -1 :
-			output += " Success"
+			return get_rc_ok()
 		else:
-			output += " Fail"
-		return output
+			return get_rc_nok()
 
 	def setDNS(self):
 		output = ''
 		try:
 			output += self._ssh_session.executeCli('ip name-server %s '%self._name_server)
-			output = output + " Success"
 		except Exception:
 			message ( "Cannot set dns server on %s " % self._host,{ 'style': 'WARNING'}  )
-		return output
+			return get_rc_nok()
+		return get_rc_ok()
 	
 	def startVMs(self):
 		for vm_name in self._vms:

@@ -181,4 +181,4 @@ setup.ini
 
 License
 ----
-??
+**Free , Hell Yeah!**

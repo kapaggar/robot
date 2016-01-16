@@ -177,7 +177,7 @@ class vm_node(object):
 						time2wait = 300 - res_manStart
 						message ("Waiting for %s seconds before running hdfs report" % time2wait, {'style':'info'})
 						time.sleep(time2wait)
-					output += self.info_yarn_Setup()
+					output += self.info_yarn_setup()
 					validate_status = True
 					break
 				else:
@@ -871,7 +871,7 @@ UserKnownHostsFile /dev/null
 			message ( "Error matching javaProcess" , {'to_log':1 , 'style': 'DEBUG'} ) 
 			return False
 
-	def info_yarn_Setup(self):
+	def info_yarn_setup(self):
 		if os.environ['RPM_MODE'] :
 			return self._ssh_session.executeShellasUser('reflex','/opt/hadoop/bin/hdfs dfsadmin -report')
 		else :
@@ -1069,16 +1069,23 @@ UserKnownHostsFile /dev/null
 	
 	def setclustering(self):
 		output = ''
-		if not self.is_clusternode():
-			message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-			return False # TODO Raise exception
-		if not self._cluster_name:
-			self._cluster_name = self._set_clusterName() 
-		output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
-		output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
-		output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
-		output += self._ssh_session.executeCli('cluster enable')
-		return output
+		try:
+			if not self.is_clusternode():
+				message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+				return False # TODO Raise exception
+			if not self._cluster_name:
+				self._cluster_name = self._set_clusterName() 
+			output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
+			output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
+			output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
+			output += self._ssh_session.executeCli('cluster enable')
+		except Exception, err:
+			return record_status("Configure Clustering",get_rc_error())
+		
+		if output.isspace() or output.find(self._cluster_name) != -1:
+			return record_status("Configure Clustering",get_rc_ok())
+		else :
+			return record_status("Configure Clustering",get_rc_nok())
 
 	def setStorNw(self):
 		output = ''
@@ -1324,9 +1331,10 @@ HOSTNAME=%s
 		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
 		message ( "unregisterCluster %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 
-	def validate_HDFS(self):
+	def get_yarn_info(self):
 		if self.is_clusternode() and not self.is_clustermaster():
-			return "Part of Cluster but not master. skipping node %s" % self._name
+			message ("Part of Cluster but not master. skipping node %s" % self._name, {'style':'debug'})
+			return 
 		output = ''
 		report = ''
 		retry = 0
@@ -1342,7 +1350,7 @@ HOSTNAME=%s
 						time2wait = 300 - res_manStart
 						message ("Waiting for %s seconds before running hdfs report" % time2wait, {'style':'info'})
 						time.sleep(time2wait)
-					output += self.info_yarn_Setup()
+					output += self.info_yarn_setup()
 					validate_status = True
 					break
 				else:
@@ -1352,7 +1360,13 @@ HOSTNAME=%s
 			except Exception:
 				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
 				return False
-		
+
+	def validate_HDFS(self):
+		if self.is_clusternode() and not self.is_clustermaster():
+			message ("Part of Cluster but not master. skipping node %s" % self._name, {'style':'debug'})
+			return 
+		output = ''
+		report = ''
 		message ("Now HDFS config report", {'style':'INFO'})
 		report += str(self.hdfs_report())
 		if report.find('ERROR') != -1 :

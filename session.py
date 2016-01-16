@@ -7,10 +7,13 @@ import socket
 import commands
 import os,sys
 import random
+import logging
+from logging.handlers import MemoryHandler
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
 from Toolkit import *
 
+__all__ = ['executeCli','executePmx','executeShell','executeCliasUser','executeShellasUser',]
 
 class session(object):
 	#    re_newlines = re.compile(r'[\n|\r]', re.UNICODE + re.I + re.M)
@@ -35,8 +38,11 @@ class session(object):
 		self.newline 				= "\n"
 		self.current_send_string	= ''
 		if host and username and password:
-			self.connect()
-		message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+			try:
+				self.connect()
+				message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'OK'}  )
+			except Exception, e:
+				message ( "session init FAILED for host %s@%s %s" % (self._username,self._host,str(e)),{'to_trace': '1' ,'style': 'NOK'}  )
 	@property
 	
 	def __del__(self):
@@ -67,15 +73,30 @@ class session(object):
 			ret.append(new_line)
 		return ret
 
-	def checkFileExist(self,filenameFullPath):
-		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
-		output= self.executeShell(command).split("\n")[-1]
-		if output == "File exists":
-			trace.info("File '%s' exists"%filenameFullPath)
-			return True
-		else:
-			trace.trace("File '%s' doesn't exists"%filenameFullPath)
-		return False
+	def _read(self):
+		data = ""
+		got_data = False
+		timeOut = 120
+		while timeOut > 0 :
+			if self.chan.recv_ready():
+				data = unicode(self.chan.recv(4096), errors='ignore')
+				got_data = True
+				break
+			else:
+				time.sleep(0.5)
+				timeOut = timeOut - 1
+		try:
+			if got_data:
+				return data
+		except Exception:
+			message ( "Unable to read from channel" ,{'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}) 
+			return False
+	
+	def _read_all(self):
+		data = ""
+		while self.chan.recv_ready():
+			data += unicode(self.chan.recv(4096), errors='ignore')
+		return data
 
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
@@ -305,7 +326,7 @@ class session(object):
 			retry = retry - 1
 			while timeOut > 0:
 				self.write("")
-				buff = self.read()
+				buff = self._read()
 				if buff is not None:
 					lines = buff.splitlines()
 				else:
@@ -383,31 +404,6 @@ class session(object):
 		output.lstrip()
 		return output
 
-	def read(self):
-		data = ""
-		got_data = False
-		timeOut = 120
-		while timeOut > 0 :
-			if self.chan.recv_ready():
-				data = unicode(self.chan.recv(4096), errors='ignore')
-				got_data = True
-				break
-			else:
-				time.sleep(0.5)
-				timeOut = timeOut - 1
-		try:
-			if got_data:
-				return data
-		except Exception:
-			message ( "Unable to read from channel" ,{'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}) 
-			return False
-
-	def read_all(self):
-		data = ""
-		while self.chan.recv_ready():
-			data += unicode(self.chan.recv(4096), errors='ignore')
-		return data
-
 	def tellPrompt(self,line):
 		try:
 			if self.getshellPrompt(line):
@@ -428,7 +424,7 @@ class session(object):
 			else:
 				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
 				return False
-		except Exception:
+		except Exception, err:
 			errorMsg = "Error: %s" % traceback.format_exc()
 			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
 			terminate_self("Something bad happened with guessing current prompt. Exiting. see traces.")
@@ -497,10 +493,8 @@ class session(object):
 					 ) 
 			return False
 
-
-
-
 if __name__ == '__main__':
 	ssh_session = session('192.168.173.211', username='admin', password='admin@123')
 	prompt = ssh_session.getPrompt()
+	print prompt
 	
