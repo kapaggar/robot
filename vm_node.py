@@ -123,7 +123,10 @@ class vm_node(object):
 			if user == "root":
 				continue
 			output += self._ssh_session.executeCli('ssh client user %s authorized-key sshv2 \"%s\"'%(user,pubkey))
-		return output
+		if not output or output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def bring_storage(self):
 		output = ''
@@ -390,7 +393,7 @@ UserKnownHostsFile /dev/null
 		output = ''
 		for vm in self.nodes_ip.keys():
 			output += self._ssh_session.executeShell('grep -q %s /etc/hosts && sed -i -e \'s/^%s.*$/%s %s/\' /etc/hosts || echo \"%s %s\" >> /etc/hosts' %(vm, self.nodes_ip[vm],self.nodes_ip[vm],vm, self.nodes_ip[vm],vm))
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -481,7 +484,7 @@ UserKnownHostsFile /dev/null
 	def clone_volume(self):
 		output =  self._host_ssh_session.executeCli("_exec /bin/cp -f --sparse=always %s %s" % (self._template,self._diskimageFull))
 		message ( "cloned volume for %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -495,11 +498,12 @@ UserKnownHostsFile /dev/null
 			output += self._ssh_session.executeCli('pm process collector launch auto')
 			output += self._ssh_session.executeCli('pm liveness grace-period 600')
 			output += self._ssh_session.executeCli('internal set modify - /pm/process/collector/term_action value name /nr/collector/actions/terminate')
-			output += " Success"
 		except Exception:
-			message ("Failed in config_collector" ,						{'style':'NOK'})
-			return "Failed"
-		return output
+			return record_status("Collector Configuration",get_rc_error())
+		if not output or output.isspace():
+			return record_status("Collector Configuration",get_rc_ok())
+		else:
+			return record_status("Collector Configuration",get_rc_nok())
 
 	def collector_sanity(self):
 		from subprocess import Popen, PIPE
@@ -516,8 +520,13 @@ UserKnownHostsFile /dev/null
 
 	def configure(self):
 		output = ''
+		response = ''
 		try:
-			output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)
+			response = self._host_ssh_session.executeCli('show virt vm %s' % self._name)
+			if response.find('not found') != -1:
+				pass
+			else:
+				output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)			
 			output += self._host_ssh_session.executeCli('virt vm %s vcpus count %s' % (self._name,self._cpu) )
 			output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory) )
 			output += self._host_ssh_session.executeCli('virt vm %s storage device bus virtio drive-number 1 source file %s mode read-write' % (self._name,self._diskimage) )
@@ -527,16 +536,21 @@ UserKnownHostsFile /dev/null
 			output += self._host_ssh_session.executeCli('virt vm %s interface 2 macaddr %s' % (self._name,self._storMac) )    
 			output += self._host_ssh_session.executeCli('virt vm %s comment %s' % (self._name, "\"Manufctd with Image %s\""%self._release_ver ))
 			output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory ))
-			output += " Success"
 		except Exception:
 			message ("Failure configuring Err = %s in VM %s" % (output,self._name) ,{'style':'TRACE'})
-			return False
-		return output 
+			terminate_self(Exiting)
+			return get_rc_nok()
+		
+		if not output or output.isspace():
+			return get_rc_ok()
+		else:
+			message ("Failure configuring VM %s in %s" % (output.strip(),self._name) ,{'style':'FATAL'})
+			return get_rc_nok()
 
 	def config_write(self):
 		output = ''
 		output += self._ssh_session.executeCli('config write')
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -547,7 +561,7 @@ UserKnownHostsFile /dev/null
 		output += self._ssh_session.executeCli('ntpdate  %s' % self._ntpserver)
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntpserver)
 		output += self._ssh_session.executeCli('ntp enable ')
-		if "adjust time server" in output:
+		if "adjust time server" in output or "step time server" in output:
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -613,11 +627,12 @@ UserKnownHostsFile /dev/null
 		output = ''
 		try:
 			output += self._ssh_session.executeCli('configuration revert factory',wait=10)
-			
 		except Exception as e:
-			record_status("Factory revert error in %s = %s \n %s" %(self._name,output,str(e)),"ERROR")
-		return output
-
+			return record_status("Config Factory Revert",get_rc_error())
+		if output.find('%') != -1:
+			return record_status("Config Factory Revert",get_rc_nok())
+		else :
+			return record_status("Config Factory Revert",get_rc_ok())
 	def mpio_alias(self):
 		output = 'SUCCESS'
 		for alias in self._mpio_alias.keys():
@@ -714,7 +729,7 @@ UserKnownHostsFile /dev/null
 		if self._namenode or self._rubixnode or self._instanode:
 			pass
 		else :
-			return "Not Generating keys in DataNode"
+			return record_status("Configure generating DSA-Keys",get_rc_skipped())
 		
 		for creds in self._enabledusers:
 			user,password = creds.split(":")
@@ -729,11 +744,15 @@ UserKnownHostsFile /dev/null
 					self._dsakey = m1.group("pubkey")
 					tuples = user + ":" + self._dsakey
 					self.pub_keys.append(tuples)
-			except Exception:
-				errorMsg = "Error:  Cannot obtain ssh public keys from host"
+			except Exception, err:
+				errorMsg = "Error:  Cannot obtain ssh public keys from host %s"%(str(err))
 				message ( "Failure in gen_dsakey  %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return False
-		return output
+				return record_status("Configure generating DSA-Keys",get_rc_error())
+			
+		if output.find('ssh-dss') != -1:
+			return record_status("Configure generating DSA-Keys",get_rc_ok())
+		else:
+			return record_status("Configure generating DSA-Keys",get_rc_nok())
 
 	def get_iscsiSessions(self):
 		output = ''
@@ -851,11 +870,15 @@ UserKnownHostsFile /dev/null
 
 	def install_license(self):
 		output = ''
-		output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
-		if output.isspace():
-			return get_rc_ok()
+		try :
+			output += self._ssh_session.executeCli('license install LK2-RESTRICTED_CMDS-88A4-FNLG-XCAU-U')
+		except Exception, err:
+			return record_status("License Install",get_rc_error())
+		
+		if not output or output.isspace():
+			return record_status("License Install",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("License Install",get_rc_nok())
 
 
 	def is_ResManUp(self):
@@ -950,7 +973,10 @@ UserKnownHostsFile /dev/null
 			if user == "root":
 				continue
 			output += self._ssh_session.executeCli('_exec mdreq set delete - /ssh/server/username/%s/auth-key/sshv2/ '%user)
-		return output
+		if not output or output.isspace():
+			return get_rc_ok()
+		else:
+			return get_rc_nok()
 
 	def remove_storage(self):
 		output = ''
@@ -959,7 +985,7 @@ UserKnownHostsFile /dev/null
 		time.sleep(10)
 		for fs_name in self._tps_fs.keys():
 			output +=  self._ssh_session.executeCli('no tps fs %s' %(fs_name))
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -968,7 +994,7 @@ UserKnownHostsFile /dev/null
 		output = ''
 		output += self._ssh_session.executeCli('config write')
 		output += self._ssh_session.executeCli('reload')
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -1024,7 +1050,10 @@ UserKnownHostsFile /dev/null
 
 	def rotate_logs(self):
 		output = ''
-		output += self._ssh_session.executeCli('logging files rotation force')
+		try:
+			output += self._ssh_session.executeCli('logging files rotation force')
+		except Exception ,err:
+			return record_status("Logrotation Install",get_rc_error())
 		if output.isspace():
 			return get_rc_ok()
 		else:
@@ -1033,7 +1062,7 @@ UserKnownHostsFile /dev/null
 	def setSnmpServer(self):
 		output = ''
 		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -1041,17 +1070,22 @@ UserKnownHostsFile /dev/null
 
 	def setHostName(self):
 		output = ''
-		output += self._ssh_session.executeCli('hostname %s' % self._name )
-		output += self._ssh_session.executeCli('config write')
-		if output.isspace():
-			return get_rc_ok()
+		response = ''
+		try:
+			output += self._ssh_session.executeCli('hostname %s' % self._name )
+			output += self._ssh_session.executeCli('config write')
+			response = self._ssh_session.executeCli('_exec mdreq -v query get - /system/hostname')
+		except Exception,err:
+			return record_status("Configure Hostname",get_rc_error())
+		if response.find( self._name ) != -1:
+			return record_status("Configure Hostname",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("Configure Hostname",get_rc_nok())
 
 	def set_snmpsink(self):
 		output = ''
 		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c '%self._snmpsink)
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
@@ -1061,28 +1095,30 @@ UserKnownHostsFile /dev/null
 		output = ''
 		for vm in self.nodes_ip.keys():
 			output += self._ssh_session.executeCli('ip host %s %s '%(vm,self.nodes_ip[vm]))
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
 
-	
 	def setclustering(self):
 		output = ''
+		response = ''
 		try:
 			if not self.is_clusternode():
 				message ( "Improper calling of setclustering in %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-				return False # TODO Raise exception
+				return get_rc_nok() # TODO Raise exception
 			if not self._cluster_name:
 				self._cluster_name = self._set_clusterName() 
 			output += self._ssh_session.executeCli('cluster id %s'%self._cluster_name)
 			output += self._ssh_session.executeCli('cluster master address vip %s /%s'%(self._clusterVIP,self._mask))
 			output += self._ssh_session.executeCli('cluster name %s'%self._cluster_name)
 			output += self._ssh_session.executeCli('cluster enable')
+			time.sleep(5)
+			response = self._ssh_session.executeCli('_exec mdreq -v query get - /cluster/state/local/error_status')
 		except Exception, err:
 			return record_status("Configure Clustering",get_rc_error())
 		
-		if output.isspace() or output.find(self._cluster_name) != -1:
+		if response.find('no error') != -1:
 			return record_status("Configure Clustering",get_rc_ok())
 		else :
 			return record_status("Configure Clustering",get_rc_nok())
@@ -1102,10 +1138,16 @@ UserKnownHostsFile /dev/null
 		HA =''
 		journal_nodes = ''
 		output = ''
-		client_ip = None 
-		cmd = "no register hadoop_yarn\n"
+		client_ip = None
+		response = ''
+		cmd = ''
+		response = self._ssh_session.executeCli('internal query  get - /tps/process/hadoop_yarn')
+		if response.find('% No bindings returned.') != -1:
+			pass
+		else:
+			# Assume hadoop yarn is already configured, remove it first
+			cmd = "no register hadoop_yarn\n"
 		cmd += "register hadoop_yarn\n"
-		
 		if self.is_clusternode():
 			HA = 'True'
 			client_ip = self._clusterVIP
@@ -1139,8 +1181,11 @@ UserKnownHostsFile /dev/null
 			
 		output += self._ssh_session.executePmx(cmd)
 		output += self._ssh_session.executeCli('pm process tps restart')
-		message ( " tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		return output
+		message ( "tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+		if output.find('^') != -1 or output.find('%') != -1:
+			record_status("Manufacturing with ISO",get_rc_ok())
+		else:
+			record_status("Manufacturing with ISO",get_rc_skipped())
 
 	def set_clusterMaster(self):
 		output = ''
@@ -1216,14 +1261,14 @@ HOSTNAME=%s
 		output = ''
 		output += self._ssh_session.executeCli('no user %s disable'%user)
 		output += self._ssh_session.executeCli('user %s password %s' %(user, password))
-		if output.isspace():
+		if not output or output.isspace():
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
 
-
 	def set_mfgdb(self):
 		output = ''
+		response = ''
 		var_offset = None
 		re_varoffset = re.compile( r"^\S+\.img8\s+(?P<varOffset>\d+)\s+\S+\s+\S+\s+\S+\s+Linux",re.M)
 		layout_template = self._host_ssh_session.executeCli('_exec fdisk -lu %s' % self._diskimageFull )
@@ -1235,15 +1280,19 @@ HOSTNAME=%s
 				message ( "varoffset in set_mfgdb is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
 			else:
 				message ( "Cannot find VarOffset in  set_mfgdb ",{'to_trace': '1' ,'style': 'TRACE'}  )
-				return False
+				return record_status("MFG DB Configuration",get_rc_error())
 		except Exception:
 			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
-			return False
+			return record_status("MFG DB Configuration",get_rc_error())
 		
 		offset_bytes = int(var_offset) * 512
 		loop_dev = self._get_loop_device()
 		output +=  self._host_ssh_session.executeCli('_exec /sbin/losetup %s %s -o %s ' % ( loop_dev , self._diskimageFull , offset_bytes ))
-		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/')
+		response = self._host_ssh_session.executeCli('_exec grep /mnt/cdrom /proc/mounts')
+		if response.find('/mnt/cdrom') != -1 :
+			# /mnt/cdrom mount-point already in use, lets try unmounting it
+			self._host_ssh_session.executeCli('_exec umount /mnt/cdrom/')
+			#
 		output +=  self._host_ssh_session.executeCli('_exec mount %s /mnt/cdrom/' % loop_dev )
 		#TODO make a config.dir backp
 		output +=  self._host_ssh_session.executeCli("_exec /opt/tms/bin/mddbreq -c /mnt/cdrom/mfg/mfdb set modify \"\" /mfg/mfdb/system/hostid string %s" % self._hostid )
@@ -1268,7 +1317,10 @@ HOSTNAME=%s
 
 		output +=  self._host_ssh_session.executeCli('_exec umount /mnt/cdrom')
 		output +=  self._host_ssh_session.executeCli('_exec losetup -d %s' % loop_dev)
-		return output
+		if not output or output.isspace():
+			return record_status("MFG DB Configuration",get_rc_ok())
+		else:
+			return record_status("MFG DB Configuration",get_rc_nok())
 	
 	def ssh_self(self):
 		vm_up = False
@@ -1303,7 +1355,7 @@ HOSTNAME=%s
 					self.disable_timeout()
 				return self._ssh_session
 			else :
-				message ( "Exception that SSH connection can;t be made to the VM"  ,			{'style': 'FATAL'})
+				message ( "Exception: SSH connection can't be made to the VM %s"%(self._name)  ,			{'style': 'FATAL'})
 				return False
 		elif  self._ssh_session :
 			return self._ssh_session
@@ -1360,21 +1412,21 @@ HOSTNAME=%s
 			except Exception:
 				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
 				return False
+		return output
 
 	def validate_HDFS(self):
 		if self.is_clusternode() and not self.is_clustermaster():
-			message ("Part of Cluster but not master. skipping node %s" % self._name, {'style':'debug'})
-			return 
+			message ("Skipping standby node %s" % self._name, {'style':'DEBUG'})
 		output = ''
 		report = ''
 		message ("Now HDFS config report", {'style':'INFO'})
 		report += str(self.hdfs_report())
 		if report.find('ERROR') != -1 :
-			message ("HDFS Report = %s" % report ,{'style':'NOK'} )
+			return record_status("HDFS Current Status",get_rc_nok())
 		else :
-			message ("HDFS Report = %s" % report ,{'style':'OK'} )
-		output += report 
-		return output
+			return record_status("HDFS Current Status",get_rc_ok())
+
+
 
 if __name__ == '__main__':
     pass

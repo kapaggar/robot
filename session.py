@@ -145,28 +145,30 @@ class session(object):
 		message ( "executeCli| prompt=> %s| cmd=> %s| host=> %s|" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "shell":
 			self.run_till_prompt("cli -m config",self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit",self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "en":
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
-		#Todo Raise exception"
-		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'}) 
-
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
+		
 	def executePmx(self,cmd,wait=1,timeout=60):
 		output = ''
 		prompt = self.getPrompt()
@@ -175,22 +177,26 @@ class session(object):
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "shell":
 			output = self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("exit", self.re_shellPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "pmx":
 			output = self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
-			return output
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
 
 	def executeShell(self,cmd,wait=1,timeout=300):
 		output = ''
@@ -200,21 +206,25 @@ class session(object):
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
-			return output
+			pass
 		elif prompt == "shell":
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit", self.re_cliPrompt)
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt)
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
-			return output
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
 
 	def executeShellasUser(self,user,cmd,wait=1,timeout=180):
 		# su - reflex -c "cli -m config <<< 'conf wr'"  
@@ -353,8 +363,8 @@ class session(object):
 		data = ''
 		output = ''
 		lastline = ''
+		alerted = None
 		cmds = self._cmd_fix_input_data(cmd)
-		
 		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':0 , 'style': 'TRACE'})
 
 		for lines in cmds:
@@ -399,7 +409,11 @@ class session(object):
 					if prompt in lastline:
 						break
 			else :
-				message ( "Prompt not responding, sending newline char",{'to_stdout':1, 'to_log':0 , 'style': 'TRACE'}) 	
+				if not alerted:
+					message ( "Prompt not responding in %s for %s"%(self._host,cmd),{'to_stdout':1, 'to_log':1 , 'style': 'TRACE'})
+					alerted = 1
+				else :
+					message ( "sending newline again",{'to_trace':1, 'style': 'TRACE'})
 				self.write("")
 		output.lstrip()
 		return output
@@ -407,26 +421,26 @@ class session(object):
 	def tellPrompt(self,line):
 		try:
 			if self.getshellPrompt(line):
-				message ( "In shell prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In shell prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "shell"
 			elif self.getcliPrompt(line):
-				message ( "In cli prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In cli prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "cli"
 			elif self.getenPrompt(line):
-				message ( "In en prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In en prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "en"
 			elif self.getLoginPrompt(line):
-				message ( "In login prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In login prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "login"
 			elif line.find("pm extension>") != -1:
-				message ( "In pmx prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In pmx prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "pmx"
 			else:
-				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return False
 		except Exception, err:
 			errorMsg = "Error: %s" % traceback.format_exc()
-			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
+			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': 1 ,'style': 'TRACE'}  )
 			terminate_self("Something bad happened with guessing current prompt. Exiting. see traces.")
 			return None
 
@@ -454,18 +468,18 @@ class session(object):
 				md2 = md5.new(remote_file_data).digest()
 				if md1 == md2:
 					is_up_to_date = True
-					message ( "UNCHANGED %s" % os.path.basename(fname),  {'style': 'debug'}  )
+					message ( "UNCHANGED %s" % os.path.basename(fname),  {'style': 'DEBUG'}  )
 					sftp.chmod (remote_file,perm)
 					return
 				else:
-					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'info'}  )
+					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'INFO'}  )
 		except Exception:
-			message ( "NEW %s" % os.path.basename(fname),  {'style': 'info'}  )
+			message ( "NEW %s" % os.path.basename(fname),  {'style': 'INFO'}  )
 
 		if not is_up_to_date:
 			sftp.put(local_file, remote_file)
 			sftp.chmod (remote_file,perm)
-			message ( "Copied file  %s to %s" % (local_file,remote_file),  {'style': 'debug'}  )
+			message ( "Copied file  %s to %s" % (local_file,remote_file),  {'style': 'DEBUG'}  )
 			#except :
 			#	message ( "Cannot copy file %s from % to %s" % (fname,dir_local,dir_remote),  {'style': 'nok'}  )
 

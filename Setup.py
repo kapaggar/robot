@@ -7,6 +7,7 @@ import datetime
 import argparse
 import threading
 import random
+import HTML
 from vm_node import vm_node
 from Host import Host
 from configobj import ConfigObj,flatten_errors
@@ -16,30 +17,30 @@ from pprint import pprint
 
 hosts = list()
 hdfs_report = ''
-setup_yarn_info =''
+setup_yarn_info = []
 
 def basic_settings(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now going inside VM %s, setting up ssh connections" % vm_name, {'to_log':'0','style': 'DEBUG'} )
+		message ( "Now going inside VM %s, setting up ssh connections" % vm_name		, {'style': 'DEBUG','to_log':'0',} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "RotateLog_Output = %s " %vm.rotate_logs()			, {'style': 'INFO'} )
+			message ( "Rotating Logs in %s =\t\t%s " %(vm_name,vm.rotate_logs())			, {'style': 'INFO'} )
 			if opt_reconfig:
-				message ( "Factory-Revert_Output = %s " %vm.factory_revert()	, {'style': 'INFO'} )
-			message ( "License-Install_Output = %s " %vm.install_license()	, {'style': 'INFO'} )
-			message ( "SnmpConfig_Output = %s " %vm.setSnmpServer()			, {'style': 'INFO'} )
-			message ( "DNS-Config_Output = %s " %vm.config_dns()			, {'style': 'INFO'} )
-			message ( "NTP-Config_Output = %s " %vm.config_ntp()			, {'style': 'INFO'} )
-			message ( "User-Config_Output = %s " %vm.configusers()			, {'style': 'INFO'} )
-			message ( "Hostname-Config_Output = %s " %vm.setHostName()		, {'style': 'INFO'} )
-			message ( "HostMaps_Output = %s " %vm.setIpHostMaps()			, {'style': 'INFO'} )
-			message ( "Storage-nw_Output = %s " %vm.setStorNw()				, {'style': 'INFO'} )
-			message ( "Config-Write_Output = %s " %vm.config_write()		, {'style': 'INFO'} )
+				message ( "Factory-Revert in %s =\t\t%s " %(vm_name,vm.factory_revert())	, {'style': 'INFO'} )
+			message ( "License Install in %s =\t\t%s " %(vm_name,vm.install_license())		, {'style': 'INFO'} )
+			message ( "Snmp Config in %s =\t\t%s " %(vm_name,vm.setSnmpServer())			, {'style': 'INFO'} )
+			message ( "DNS Config in %s =\t\t%s " %(vm_name,vm.config_dns())				, {'style': 'INFO'} )
+			message ( "NTP Config in %s =\t\t%s " %(vm_name,vm.config_ntp())				, {'style': 'INFO'} )
+			message ( "User Config in %s =\t\t%s " %(vm_name,vm.configusers())				, {'style': 'INFO'} )
+			message ( "Hostname Config in %s =\t\t%s " %(vm_name,vm.setHostName())			, {'style': 'INFO'} )
+			message ( "IP Host Mapping in %s =\t\t%s " %(vm_name,vm.setIpHostMaps())		, {'style': 'INFO'} )
+			message ( "N/w Interface Config in %s =\t%s " %(vm_name,vm.setStorNw())		, {'style': 'INFO'} )
+			message ( "Config-Write_Output in %s =\t\t%s " %(vm_name,vm.config_write())	, {'style': 'TRACE','to_trace':'1'} )
 		else :
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_sync_basic_settings(tuples):
 	threads = []
@@ -65,10 +66,10 @@ def centos_basic_settings(line):
 			message ( "Centos Factory-Revert_Output in vm %s = %s " %(vm_name,vm.centos_factory_revert())	, {'style': 'INFO'} )
 		message ( "Centos get Base repo in vm %s = %s " 			%(vm_name,vm.centos_get_repo())			, {'style': 'INFO'} )
 		message ( "Centos Install basic packages in vm %s = %s " %(vm_name,vm.centos_install_base())		, {'style': 'INFO'} )
-		message ( "Centos Configure ntp in vm %s  = %s " 		%(vm_name,vm.centos_cfg_ntp())			, {'style': 'INFO'} )
+		message ( "Centos Configure ntp in vm %s  = %s " 		%(vm_name,vm.centos_cfg_ntp())				, {'style': 'INFO'} )
 		message ( "Centos Hostname maps Output in vm %s  = %s "	%(vm_name,vm.centos_setIpHostMaps())		, {'style': 'INFO'} )
-		message ( "Centos rsyslog config in vm %s  = %s "	%(vm_name,vm.centos_cfg_rsyslog())		, {'style': 'INFO'} )
-		message ( "Centos add reflex sudoer in vm %s  = %s "	%(vm_name,vm.centos_cfg_sudo())		, {'style': 'INFO'} )
+		message ( "Centos rsyslog config in vm %s  = %s "	%(vm_name,vm.centos_cfg_rsyslog())				, {'style': 'INFO'} )
+		message ( "Centos add reflex sudoer in vm %s  = %s "	%(vm_name,vm.centos_cfg_sudo())				, {'style': 'INFO'} )
 
 		
 	else:
@@ -96,12 +97,12 @@ def centos_checkHDFS(tuples):
 	output = ''
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.centos_validate_HDFS()
-				message ("Centos Check-HDFS_Output in %s = [%s]" % (vm_name,response)							,{'style': 'INFO'} )
+				message ("Centos Check-HDFS_Output in %s = [%s]" % (vm_name,response)	,{'style': 'INFO'} )
 				output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
@@ -125,7 +126,7 @@ def centos_install_reflex(line):
 	vm = config['HOSTS'][host][vm_name]['vm_ref']
 	time.sleep(random.random())
 	if vm.ssh_self():
-		message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())			,{'style': 'INFO'} )
+		message ("Centos yum reflex install in %s  = [%s]" % (vm_name,vm.centos_install_reflex())	,{'style': 'INFO'} )
 	else:
 		message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 		terminate_self("Exiting")
@@ -136,7 +137,7 @@ def centos_keygen(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos generate keys for root in %s = %s " %(vm_name, vm.centos_genkeys('root'))			, {'style': 'INFO'} )
+			message ( "Centos generate keys for root in %s = %s " %(vm_name, vm.centos_genkeys('root'))	, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -147,9 +148,9 @@ def centos_keyshare(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos distribute keys for root in %s = %s " %(vm_name,vm.centos_distkeys('root'))		, {'style': 'INFO'} )
+			message ( "Centos distribute keys for root in %s = %s " %(vm_name,vm.centos_distkeys('root'))	, {'style': 'INFO'} )
 		else:
-			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			message ( "SSH capability on %s not working." % vm_name	, {'style': 'Debug'} )
 			terminate_self("Exiting")
 	return "Success"
 
@@ -158,9 +159,9 @@ def centos_reflex_keygen(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "Centos distribute keys for reflex in %s = %s " %(vm_name,vm.centos_genkeys('reflex'))	, {'style': 'INFO'} )
+			message ( "Centos distribute keys for reflex in %s = %s " %(vm_name,vm.centos_genkeys('reflex')), {'style': 'INFO'} )
 		else:
-			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
+			message ( "SSH capability on %s not working." % vm_name	, {'style': 'Debug'} )
 			terminate_self("Exiting")
 	return "Success"
 
@@ -220,13 +221,13 @@ def collect_yarn_setup_info(tuples):
 	output = ''
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now checking yarn info inside VM %s" % vm_name,{'style': 'INFO'} )
+		message ( "Now checking yarn info inside VM %s" % vm_name,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.get_yarn_info()
 				if response:
-					message ("Check-yarn Info = [%s]" % response,{'style': 'INFO'} )
+					message ("Show yarn Info in %s = \t\t%s]" % (vm_name,response),{'style': 'INFO'} )
 					output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
@@ -236,13 +237,13 @@ def checkHDFS(tuples):
 	output = ''
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		message ( "Now checking HDFS inside VM %s" % vm_name,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.validate_HDFS()
 				if response:
-					message ("Check-HDFS_Output = [%s]" % response,{'style': 'INFO'} )
+					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, response),{'style': 'INFO'} )
 					output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
@@ -273,7 +274,7 @@ def config_collector(tuples):
 				if os.environ['RPM_MODE']:
 					message ("Centos Config-Collector_Output in %s = [%s]" % (vm_name,vm.centos_col_basic()),{'style': 'INFO'} )
 				else :
-					message ("Config-Collector_Output = [%s]" % vm.col_basic(),{'style': 'INFO'} )
+					message ("Collector configution in %s = \t\t[%s]" % (vm_name,vm.col_basic()),{'style': 'INFO'} )
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 
@@ -296,9 +297,10 @@ def do_manufacture(hosts):
 				threads.append(newThread)
 		for thread in threads:
 				thread.join()
-	except Exception:
-		record_status("Manufacturing with iso %s" %(iso_name),"ERROR")
-	return "Success"
+	except Exception,err:
+		message ( 'Exception inManufacturing VM %s'%(str(err)), {'style': 'FATAL'} )
+		terminate_self('Exiting')
+	return get_rc_ok()
 
 def do_centosInstall(hosts):
 	message ( 'RPM install Option Set', {'style': 'INFO'} ) 
@@ -352,7 +354,7 @@ def generate_keys(tuples):
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
-			message ( "GenDSAKey_Output = %s " % vm.gen_dsakey()		, {'style': 'INFO'} )
+			message ( "GenDSAKey_Output %s = \t\t%s " % (vm_name,vm.gen_dsakey())		, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
@@ -408,28 +410,27 @@ def get_rubixvms(config):
 	return tuples
 
 def manuf_VMs(host):
-	message (  "Enable-Virt_Output = [%s]" % host.enableVirt()			,{'style': 'INFO'} )
-	message (  "Sync-Time_Output = [%s] " % host.synctime()				,{'style': 'INFO'} )
-	message (  "SetHostDNS_Output = [%s] " % host.setDNS()				,{'style': 'INFO'} )
-	message (  "HostMapping_Output = [%s] " % host.vmHostMaps()			,{'style': 'INFO'} )
+	message (  "Enabling Virtualisation in %s = \t\t[%s]" % ( host.getname(),host.enableVirt())			,{'style': 'INFO'} )
+	message (  "NTP Syncing in %s  = \t\t[%s] " % ( host.getname(),host.synctime())						,{'style': 'INFO'} )
+	message (  "Configuring DNS in %s = \t\t[%s] " % ( host.getname(),host.setDNS())					,{'style': 'INFO'} )
+	message (  "IP Host Mapping in %s  = \t\t[%s] " % ( host.getname(),host.vmHostMaps())				,{'style': 'INFO'} )
 	if opt_lazy:
 		if host.is_template_present():
 			message ( "Found template file in host %s " % host.getname()	,{'style': 'OK'} )
 			record_status("Manufacturing with ISO",get_rc_skipped())
-			return get_rc_skipped()
 		else :
 			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
-			record_status("Manufacturing with ISO",get_rc_error())
+			return record_status("Manufacturing with ISO",get_rc_error())
 			terminate_self("Template missing in host %s" % host.getname())
 			return get_rc_error()
 	else:
-		message (  "GetMfgISO_Output = [%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
-		message (  "Delete-Template_Output = [%s]"	% host.delete_template()	,{'style': 'INFO'} )
-		message (  "Create-Template_Output = [%s]"	% host.create_template()	,{'style': 'INFO'} )
-	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()		,{'style': 'INFO'} )
-	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()		,{'style': 'INFO'} )
-	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()	,{'style': 'INFO'} )
-	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()		,{'style': 'INFO'} )
+		message (  "MFG CD iso fetch = \t\t[%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
+		message (  "Deleting old templates = \t\t[%s]"	% host.delete_template()	,{'style': 'INFO'} )
+		message (  "Create-Template_Output = \t\t[%s]"	% host.create_template()	,{'style': 'INFO'} )
+	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()				,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()				,{'style': 'TRACE','to_trace':'1'} )
+	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()			,{'style': 'INFO'} )
+	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()				,{'style': 'INFO'} )
 	return get_rc_ok()
 
 def manuf_Centos_VMs(host):
@@ -447,14 +448,14 @@ def manuf_Centos_VMs(host):
 		else :
 			message ( "Cannot find template file in host %s .Exiting.." % host.getname()	,{'style': 'FATAL'} )
 			terminate_self("Template missing in host %s" % host.getname())
-			return "Failure"
+			return get_rc_nok()
 	else:
-		message (  "Get_Centos_template_Output = [%s]"	% host.get_centos_template(),{'style': 'INFO'} )
-	message ( "DeleteVMs_Output = [%s]"				% host.deleteVMs()			,{'style': 'INFO'} )
-	message ( "DeclareVMs_Output = [%s]" 			% host.declareVMs()			,{'style': 'INFO'} )
+		message (  "Get_Centos_template_Output = [%s]"	% host.get_centos_template()	,{'style': 'INFO'} )
+	message ( "DeleteVMs_Output = [%s]"				% host.deleteVMs()					,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = [%s]" 			% host.declareVMs()					,{'style': 'INFO'} )
 	message ( "Create_Centos_VM_Output = [%s]" 		% host.instantiate_centos_VMs()		,{'style': 'INFO'} )
-	message ( "PowerON-VMs_Output = [%s]" 			% host.startVMs()			,{'style': 'INFO'} )
-	return "Success"
+	message ( "PowerON-VMs_Output = [%s]" 			% host.startVMs()					,{'style': 'INFO'} )
+	return  get_rc_ok()
 
 def objectify_vms(tuples):
 	for line in tuples:
@@ -468,30 +469,30 @@ def shareKeys(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		message ( "Now sharing pub-keys inside VM %s" % vm_name, {'style': 'INFO'} ) 
+		message ( "Now sharing pub-keys inside VM %s" % vm_name									, {'style': 'DEBUG'} ) 
 		if vm.ssh_self():
-			message ( "RemoveAuthKeys_Output = %s " % vm.removeAuthKeys()		, {'style': 'INFO'} )
-			message ( "AuthPubKeys_Output = %s " % vm.authPubKeys()				, {'style': 'INFO'} )
-			message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
+			message ( "old SSHkeys removal in %s = \t\t%s " % (vm_name,vm.removeAuthKeys())		, {'style': 'INFO'} )
+			message ( "SSH Keys addition in %s = \t\t%s " % (vm_name,vm.authPubKeys())			, {'style': 'INFO'} )
+			message ( "Config-Write_Output = %s " % vm.config_write()							, {'style': 'TRACE','to_trace':'1'} )
 		else:
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			message ( "SSH capability on %s not working." % vm_name								, {'style': 'DEBUG'} )
 			terminate_self("Exiting")
 	return "Success"
 
 def setupClusters(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting clusters inside VM %s" % vm_name, {'style': 'INFO'} )
+		message ( "Now setting clusters inside VM %s" % vm_name								, {'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.is_clusternode():
-				message ( "Setup-Cluster_Output = %s " % vm.setclustering()			, {'style': 'INFO'} )
+				message ( "Clustering Setup in %s = %s " % (vm_name,vm.setclustering())		, {'style': 'INFO'} )
 				time.sleep(5) # Let clustering settle down
-				message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'INFO'} )
+				message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'TRACE','to_trace':'1'} )
 			else:
-				message ( "nothing to do in %s" %vm_name				, {'style': 'INFO'} )
+				message ( "Nothing to do in %s" %vm_name							, {'style': 'TRACE','to_trace':'1'} )
 		else:
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			message ( "SSH capability on %s not working." % vm_name					, {'style': 'DEBUG'} )
 			terminate_self("Exiting")
 			
 	return "Success"
@@ -499,31 +500,34 @@ def setupClusters(tuples):
 def setupStorage(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up storage inside VM %s" % vm_name, {'style': 'debug'} )
+		message ( "Now setting up storage inside VM %s" % vm_name					,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
-		if vm.ssh_self():
-			if vm.has_storage():
-				message ("Bring-Storage_Output = [%s]" % vm.bring_storage() ,			{'style': 'INFO'} )
-				message ("Setup MPIO-Aliasing Output = %s" % vm.mpio_alias() ,			{'style': 'INFO'} )
-				if not opt_skip_format :
-					message ( "FormatStorage_Output = [%s]" % vm.format_storage() ,	{'style': 'INFO'} )
-				message ( "MountStorage_Output = [%s]" % vm.mount_storage(),			{'style': 'INFO'} )
-				message ( "Config-Write_Output = [%s]" % vm.config_write(),			{'style': 'INFO'} )
-		else:
-			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+		try:
+			if vm.ssh_self():
+				if vm.has_storage():
+					message ("Storage Configuration in %s = \t%s" % (vm_name,vm.bring_storage()) 		,{'style': 'INFO'} )
+					message ("Multipath LUN-Aliasing in %s = \t%s" % (vm_name,vm.mpio_alias())	 		,{'style': 'INFO'} )
+					if not opt_skip_format :
+						message ( "Storage LUN Format in %s = \t%s" % (vm_name,vm.format_storage()) 	,{'style': 'INFO'} )
+					message ( "Gmountd Configuration in %s = \t%s" % (vm_name,vm.mount_storage())		,{'style': 'INFO'} )
+					message ( "Config-Write_Output in %s = %s" % (vm_name,vm.config_write())			,{'style': 'TRACE','to_trace':'1'} )
+				else:
+					message ( "No storage configured for node %s" % vm_name							,{'style': 'DEBUG'} )
+		except Exception,err:
+			message ( "SSH capability on %s not working. %s" % (vm_name,str(err))					,{'style': 'DEBUG'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def setupHDFS(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up HDFS inside VM %s" % vm_name,{'style': 'INFO'} )
+		message ( "Now setting up HDFS inside VM %s" % vm_name,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.is_namenode():
 			if vm.ssh_self():
-				message ("Setup-HDFS_Output = [%s]" % vm.setup_HDFS(),{'style': 'INFO'} )
+				message ("Setup-HDFS_Output in %s = \t\t[%s]" % (vm_name,vm.setup_HDFS()),{'style': 'INFO'} )
 			else:
-				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+				message ( "SSH capability on %s not working." % vm_name, {'style': 'DEBUG'} )
 				terminate_self("Exiting")
 	return "Success"
 
@@ -718,6 +722,26 @@ if __name__ == '__main__':
 		config['HOSTS']['force_format'] = False
 		
 	start_time = time.time()
+	
+#						,
+#					/\^/`\   
+#				   | \/   |
+#				   | |    |                               
+#				   \ \    /                             _ _
+#					'\\//'                            _{ ' }_
+#					  ||     MAIN Execution Section  { `.!.` }
+#					  ||                             ',_/Y\_,'
+#					  ||  ,                            {_,_}
+#				  |\  ||  |\                             |
+#				  | | ||  | |                          (\|  /)
+#				  | | || / /                            \| //
+#				   \ \||/ /                              |//
+#					`\\//`   \   \./    \\   \./    \ \\ |/ /
+
+			#+-------------------------+
+			#| Manufacture if required |
+			#+-------------------------+
+
 	if not opt_colsanity_only:
 		#Setup Hosts Connectivity 
 		connect_hosts(hosts)
@@ -730,11 +754,21 @@ if __name__ == '__main__':
 		if 'manufacture' in install_type:
 			if not opt_reconfig:
 				do_manufacture(hosts)
+			else :
+				record_status("Manufacturing with ISO",get_rc_skipped())
 
+			#+---------------------------------------------+
+			#| Scan INI and make necessary Data Structures |
+			#+---------------------------------------------+
 
 	allvms = get_allvms(config)
 	objectify_vms(allvms)
 	####terminate_self("Exiting")
+	
+			#+--------------------------+
+			#| Appliance Mode Execution |
+			#+--------------------------+
+
 	if not opt_colsanity_only and not opt_rpm:
 		basic_settings(allvms)
 		generate_keys(allvms)
@@ -747,10 +781,16 @@ if __name__ == '__main__':
 			setupStorage(allvms)
 		if opt_hdfs is True:
 			setupHDFS(allvms)
-			setup_yarn_info = collect_yarn_setup_info(allvms)
+			setup_yarn_info.append(collect_yarn_setup_info(allvms))
 			hdfs_report = checkHDFS(allvms)
 			config_collector(allvms)
+		else:
+			record_status("HDFS Current Status",get_rc_skipped())
 		
+			#+--------------------+
+			#| RPM Mode Execution |
+			#+--------------------+
+
 	if opt_rpm:
 		centos_sync_basic_settings(allvms)
 		centos_keygen(allvms)
@@ -769,14 +809,16 @@ if __name__ == '__main__':
 		if opt_hdfs is True:
 			centos_setupHDFS(allvms)
 			hdfs_report = centos_checkHDFS(allvms)
-			setup_yarn_info = collect_yarn_setup_info(allvms)
+			setup_yarn_info.append(collect_yarn_setup_info(allvms))
 			config_collector(allvms)
+		else:
+			record_status("HDFS Current Status",get_rc_skipped())
 
 	if opt_email:
 		message ('Sending out emails: ' ,{'style' : 'info'})
 		attachment = collect_results()
-		hdfs_html_report = HTML.table(header_row=['hdfs dfsadmin report'])
-		hdfs_html_report.append(setup_yarn_info)
+		hdfs_html_report = HTML.Table(header_row=['hdfs dfsadmin report'])
+		hdfs_html_report.rows.append([setup_yarn_info])
 		notify_email(config,str(hdfs_html_report),attachment)
 		clean_results(attachment)
 	else :

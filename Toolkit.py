@@ -18,7 +18,8 @@ logfile_name	= ''
 tracefile_name	= ''
 result_file		= ''
 mail_body		= ''
-test_status = {'SUCCESS':0,'FAILURE':0,'ERROR':0,'SKIPPED':0}
+smtp_server		= 'smtp-relay.guavus.com'
+test_status = {'SUCCESS':0,'FAIL':0,'ERROR':0,'SKIPPED':0}
 test_table = {}
 test_count = 0
 mail_report_buffer = {}
@@ -27,7 +28,7 @@ def _get_exit_status():
 	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
 
 def _rc_severity(status):
-	return_code_severity = get_exit_status()
+	return_code_severity = _get_exit_status()
 	return return_code_severity.get(status) and return_code_severity[status]
 
 def add_skipped():
@@ -37,7 +38,7 @@ def add_success():
 	test_status['SUCCESS'] +=1
 
 def add_failure():
-	test_status['FAILURE'] +=1
+	test_status['FAIL'] +=1
 
 def add_error():
 	test_status['ERROR'] +=1
@@ -49,10 +50,22 @@ def get_success():
 	return int(test_status['SUCCESS'])
 
 def get_failure():
-	return int(test_status['FAILURE'])
+	return int(test_status['FAIL'])
 
 def get_error():
 	return int(test_status['ERROR'])
+
+def get_rc_skipped():
+	return 'SKIPPED'
+
+def get_rc_ok():
+	return 'SUCCESS'
+
+def get_rc_nok():
+	return 'FAIL'
+
+def get_rc_error():
+	return 'ERROR'
 
 def append_to_trace(string_to_append):
 	"""
@@ -97,6 +110,7 @@ def append_to_file(logfile_name,string_to_append):
 	try:
 		with open(logfile_name, "a") as logfile:
 			logfile.write(string_to_append)
+			logfile.flush()
 			logfile.close()
 	except IOError:
 		with open(logfile_name, "w+") as logfile:
@@ -172,8 +186,8 @@ def collect_results():
 			tar.add(name)
 		tar.close()
 		return result_file
-	except Exception:
-		message("Unable to make tar for writing",{'style':'FATAL'})
+	except Exception, err:
+		message("Unable to make tar for writing %s"%str(err),{'style':'FATAL'})
 		return False
 
 def clear_collector_logs():
@@ -228,21 +242,8 @@ def get_nightly(base_path):
 
 def get_system_date():
     now = time.strftime("%c")
-    return now
+    return now	
 
-def get_rc_skipped():
-	return 'SKIPPED'
-
-def get_rc_ok():
-	return 'SUCCESS'
-
-def get_rc_nok():
-	return 'FAIL'
-	
-def get_rc_error():
-	return 'ERROR'
-	
-	
 def get_startProcess(process):
 		if not process:
 			return False
@@ -358,41 +359,28 @@ def message(message_string,arg_ref):
 		append_to_log ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
 	if arg_ref.get('to_trace') and arg_ref['to_trace']:
 		append_to_trace ( sprintf_nocolor ( sprintf_timestamped ( message_string ) ) )
-	
-def record_status(test_string,mystatus):
-	"""
-	'status': 'success',    success / fail / skipped / error 
-	eg: record_status ( " Test Case %s ." % self._name, {'status': 'success'}  )
-	"""
-	if not test_string:
-		return
-	if not mystatus:
-		return
-	status = mystatus.upper()
-	most_severe_status = test_table.get(test_string,None)
-	if most_severe_status and status != most_severe_status:
-		my_severity = _rc_severity(status)
-		older_severity = _rc_severity(test_table[test_string])
-		if (my_severity < older_severity):
-			return
 
-	if re.match("^success$",status, re.IGNORECASE):
-		add_success()
-	elif re.match("^fail$",status, re.IGNORECASE):
-		add_failure()
-	elif re.match("^skipped$",status, re.IGNORECASE):
-		add_skipped()
-	elif re.match("^error$",status, re.IGNORECASE):
-		add_error()
-	else:
-		add_success()
-	test_table[test_string] = status.upper()
-	return status.upper()
+def notify_email(config,msg,attachment=None):
+	notifyFrom		= config['HOSTS']['notifyFrom']
+	notifyTo		= config['HOSTS']['notifyTo']
+	email_msg		= premailer()
+	email_msg 		+= "\n\tlogfile and trace file for the run attached\n"
+	email_msg		+= str(msg)
+	notify 			= Email(smtp_server)
+	notify.setFrom(notifyFrom)
+	for email_address in notifyTo:
+		notify.addRecipient(email_address)
+	notify.setSubject("Hubrix notification")
+	notify.setHtmlBody(email_msg)
+	notify.setTextBody(email_msg)
+	if attachment:
+		notify.addAttachment(attachment)
+	return notify.send()
 
 def premailer():
 	result_colors = {
 		'SUCCESS':      'lime',
-		'FAILURE':      'red',
+		'FAIL':      'red',
 		'ERROR':        'yellow',
 		'SKIPPED':      'silver',
 	}
@@ -406,22 +394,35 @@ def premailer():
 	mySummary.rows.append([stats_values(),get_skipped(),get_success(),get_failure(),get_error()])
 	return str(myTable) + str (mySummary)
 
-def notify_email(config,msg,attachment=None):
-	notifyFrom		= config['HOSTS']['notifyFrom']
-	notifyTo		= config['HOSTS']['notifyTo']
-	email_msg		= premailer()
-	email_msg 		+= "\n\tlogfile and trace file for the run attached\n"
-	email_msg 		+= "\n\t==================\n"
-	email_msg		+= str(msg)
-	notify 			= Email("smtp-relay.guavus.com")
-	notify.setFrom(notifyFrom)
-	for email_address in notifyTo:
-		notify.addRecipient(email_address)
-	notify.setSubject("Hubrix notification")
-	notify.setHtmlBody(email_msg)
-	if attachment:
-		notify.addAttachment(attachment)
-	notify.send()
+def record_status(test_string,mystatus):
+	"""
+	'header','status': status = success / fail / skipped / error 
+	eg: record_status ( " Test Case %s ." % self._name,'success' )
+	"""
+	if not test_string:
+		return
+	if not mystatus:
+		return get_rc_skipped()
+	status = mystatus.upper()
+	most_severe_status = test_table.get(test_string,None)
+	if most_severe_status and status != most_severe_status:
+		my_severity = _rc_severity(status)
+		older_severity = _rc_severity(test_table[test_string])
+		if (my_severity < older_severity):
+			return status
+
+	if re.match("^success$",status, re.IGNORECASE):
+		add_success()
+	elif re.match("^fail$",status, re.IGNORECASE):
+		add_failure()
+	elif re.match("^skipped$",status, re.IGNORECASE):
+		add_skipped()
+	elif re.match("^error$",status, re.IGNORECASE):
+		add_error()
+	else:
+		add_success()
+	test_table[test_string] = status.upper()
+	return status.upper()
 
 def sprintf_timestamped(message):
 	timestamped_string = ''
@@ -473,6 +474,8 @@ def terminate_self(mesg=None):
 		else:
 			message ("Killing Self", {'style':'nok'} )
 		os.kill(os.getpid(), signal.SIGTERM)
+		time.sleep(1)
+		os.kill(os.getpid(), signal.SIGKILL)
 	except Exception:
 		sys.exit()
 
