@@ -46,7 +46,7 @@ class Host(object):
 		manufacture_cmd = '/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda'
 		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
-		message ( "Making template from iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
+		message ( "Making template from iso_path = %s" % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
 		iso_name = basename(iso_path)
 		try:
 			output +=  self._ssh_session.executeCli('_exec qemu-img create %s %sG' % (self._template_file,self._template_disk_size))
@@ -74,23 +74,25 @@ class Host(object):
 
 	def deleteVMs(self):
 		output = ''
-		try:
-			for vm_name in self._vms:
-				response = self._ssh_session.executeCli('show virt vm %s' % self._name)
+		response = ''
+		my_return_status = get_rc_skipped()
+		for vm_name in self._vms:	
+			try:
+				response = self._ssh_session.executeCli('show virt vm %s' % vm_name)
 				if response.find('not found') != -1:
-					return get_rc_skipped()
+					message ( "VM %s not present. Deletion skipped in %s." % (vm_name,self._name) ,{'style': 'OK'}  )
 				else:
-					output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)
-				
-				if output.find("deleted") != -1:
-					message ( "%s deletion in %s " % (vm_name,self._name) ,{'style': 'OK'}  )
-				else:
-					message ( "%s deletion in %s " % (vm_name,self._name) ,{'style': 'NOK'}  )
-					raise RuntimeError("%s VM deletion failed in %s"% (vm_name,self._name) )
-		except Exception:
-			message ( "Cannot delete vms  %s " % output,{'to_trace': '1' ,'style': 'FATAL'}  )
-			return get_rc_nok()
-		return get_rc_ok()
+					output = self._host_ssh_session.executeCli('no virt vm %s' % vm_name)
+					if output.find("deleted") != -1:
+						message ( "%s deleted in %s " % (vm_name,self._name) ,{'style': 'OK'}  )
+						my_return_status = get_rc_ok()
+					else:
+						message ( "%s deletion in %s " % (vm_name,self._name) ,{'style': 'NOK'}  )
+						my_return_status = get_rc_ok()
+			except Exception:
+				message ( "Cannot delete VM %s = %s " %(self._name,output),{'to_trace': '1' ,'style': 'FATAL'}  )
+				my_return_status = get_rc_ok()
+		return my_return_status
 	
 	def declareVMs(self):
 		for vm_name in self._vms:
@@ -120,7 +122,7 @@ class Host(object):
 		virt_status = self._ssh_session.executeCli('internal query get - /virt/config/enable',wait=1)
 		if virt_status.find("true") != -1:
 			message ("Virtualisation already enabled", {'style':'OK'})
-			return "Success"
+			return get_rc_ok()
 
 		else :
 			message ("Enabling Virtualisation", {'style':'INFO'})
@@ -129,7 +131,7 @@ class Host(object):
 			output += virt_status
 			if virt_status.find("true") != -1:
 				message ("Virtualisation enabled now", {'style':'OK'})
-				return "Success"
+				return get_rc_ok()
 			else :
 				message ("Cannot enable virtualisation	", {'style':'FAIL'})
 				return "FAILED"
@@ -165,7 +167,7 @@ class Host(object):
 				message ("Reason %s" % response,{'style':'DEBUG'})
 				terminate_self("Exiting.")
 			else :
-				output += response[-80:] + "Success"
+				output += response[-80:] + get_rc_ok()
 		except Exception :
 			message ("Unable to fetch url %s in host %s"% (centos_template_path,self.getname()),{'style':'NOK'})
 			terminate_self("Exiting.") 
@@ -245,8 +247,8 @@ class Host(object):
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "Cloning template to %s Vdisk	 = \t\t[%s]"% (vm_name,vm.clone_volume())	, {'style': 'INFO'} )
-			message ( "VM Configuration in %s config DB = \t\t[%s]"% (vm_name,vm.configure())	, {'style': 'INFO'} )
+			message ( "Cloning template to %s Vdisk	 = \t[%s]"% (vm_name,vm.clone_volume())	, {'style': 'INFO'} )
+			message ( "VM Configuration in %s config DB = \t[%s]"% (vm_name,vm.configure())	, {'style': 'INFO'} )
 			message ( "MFG DB Configuration in %s = \t\t[%s]" 	% (vm_name,vm.set_mfgdb())		, {'style': 'INFO'} )
 		return get_rc_ok()
 
@@ -256,7 +258,7 @@ class Host(object):
 			message ( "Clone-Volume_Output	= [%s]" % vm.clone_volume()		, {'style': 'INFO'} )
 			message ( "VM-Configure_Output	= [%s]" % vm.configure()		, {'style': 'INFO'} )
 			message ( "VM-SetMfgDB_Output	= [%s]" % vm.set_centos_db()	, {'style': 'INFO'} )
-		return "Success"
+		return get_rc_ok()
 			
 	def synctime(self):
 		output = ''
@@ -281,7 +283,7 @@ class Host(object):
 		for vm_name in self._vms:
 			try:
 				vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-				message ( "VM-Poweron = [%s]" % vm.power_on()					, {'style': 'INFO'} )
+				message ( "Powering on %s = [%s]" % (vm_name,vm.power_on())		, {'style': 'INFO'} )
 			except Exception :
 				return get_rc_error()
 		return get_rc_ok()
@@ -313,9 +315,10 @@ class Host(object):
 		cmd += "rm -rf /data/virt/pools/default/*.tgz \n"
 		output +=  self._ssh_session.executeShell(cmd)
 		if output.find("cannot") != -1:
-			return output + "Fail"
+			message ( "Wiping Setup failed [%s]" % output			, {'style': 'INFO'} )
+			return get_rc_nok()
 		else:
-			return output + "Success"
+			return get_rc_ok()
 
 if __name__ == '__main__':
     pass

@@ -130,16 +130,27 @@ class vm_node(object):
 
 	def bring_storage(self):
 		output = ''
-		output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
-		output += self._ssh_session.executeCli('_exec service iscsid restart')
-		output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
-		if self._forbidden_nodes:
-			output += self.remove_iscsiForbidden()
-		output += self._ssh_session.executeCli('tps iscsi restart')
-		time.sleep(10)
-		output += self._ssh_session.executeCli('tps multipath renew ')
-		
-		return output
+		response = ''
+		try:
+			output += self._ssh_session.executeCli('_exec iscsiadm -m session -u')
+			output += self._ssh_session.executeCli('_exec service iscsi stop')
+			output += self._ssh_session.executeCli('tps iscsi initiator-name %s' %self._initiatorname_iscsi)
+			output += self._ssh_session.executeCli('_exec service iscsid restart')
+			output += self._ssh_session.executeCli('tps iscsi show targets %s' % self._iscsi_target)
+			if self._forbidden_nodes:
+				output += self.remove_iscsiForbidden()
+			output += self._ssh_session.executeCli('tps iscsi restart')
+			time.sleep(10)
+			output += self._ssh_session.executeCli('tps multipath renew ')
+			
+			response = self._ssh_session.executeCli('_exec iscsiadm -m session -P3')
+			if response.find('Attached scsi disk') != -1:
+				return record_status("iSCSI setup",get_rc_ok())
+			else:
+				message ("iscsi volumes not reachable after service restart," % output, {'style':'NOK'})
+				return record_status("iSCSI setup",get_rc_nok())
+		except Exception, err:
+			return record_status("iSCSI setup",get_rc_eror())
 
 	def centos_bring_storage(self):
 		output = ''
@@ -522,11 +533,9 @@ UserKnownHostsFile /dev/null
 		output = ''
 		response = ''
 		try:
-			response = self._host_ssh_session.executeCli('show virt vm %s' % self._name)
-			if response.find('not found') != -1:
-				pass
-			else:
-				output += self._host_ssh_session.executeCli('no virt vm %s' % self._name)			
+			response = self._host_ssh_session.executeCli('no virt vm %s' % self._name)
+			if response.find('deleted') != -1:
+				message ("Deleting older copy of  %s" % (self._name) ,{'style':'TRACE','to_trace':1})		
 			output += self._host_ssh_session.executeCli('virt vm %s vcpus count %s' % (self._name,self._cpu) )
 			output += self._host_ssh_session.executeCli('virt vm %s memory %s' % (self._name,self._memory) )
 			output += self._host_ssh_session.executeCli('virt vm %s storage device bus virtio drive-number 1 source file %s mode read-write' % (self._name,self._diskimage) )
@@ -558,21 +567,30 @@ UserKnownHostsFile /dev/null
 
 	def config_ntp(self):
 		output = ''
-		output += self._ssh_session.executeCli('ntpdate  %s' % self._ntpserver)
-		output += self._ssh_session.executeCli('ntp server %s' % self._ntpserver)
-		output += self._ssh_session.executeCli('ntp enable ')
+		try:
+			output += self._ssh_session.executeCli('ntpdate  %s' % self._ntpserver)
+			output += self._ssh_session.executeCli('ntp server %s' % self._ntpserver)
+			output += self._ssh_session.executeCli('ntp enable ')
+		except Exception ,err:
+			message ("Exception in ntp config %s") % str(err),{'to_trace':1,'style':'TRACE'}
+			return record_status("NTP Config",get_rc_error())
 		if "adjust time server" in output or "step time server" in output:
-			return get_rc_ok()
+			return record_status("NTP Config",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("NTP Config",get_rc_nok())
 
 	def config_dns(self):
 		output = ''
-		output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
-		if output.isspace():
-			return get_rc_ok()
+		try:
+			output += self._ssh_session.executeCli('ip name-server %s' % self._name_server)
+		except Exception, err:
+			message ("Exception in dns server config %s") % str(err),{'to_trace':1,'style':'TRACE'}
+			return record_status("DNS Configuration",get_rc_error())
+		if not output or output.isspace():
+			return record_status("DNS Configuration",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("DNS Configuration",get_rc_nok())
+
 
 
 	def configusers(self):
@@ -598,6 +616,7 @@ UserKnownHostsFile /dev/null
 				return True
 		except Exception:
 			message ("Unable to delete node %s => %s" % (ip_port,output) ,{'style':'NOK'})
+			return False
 
 	def dottedQuadToNum(self,ip):
 		hexn = ''.join(["%02X" % long(i) for i in ip.split('.')])
@@ -633,40 +652,7 @@ UserKnownHostsFile /dev/null
 			return record_status("Config Factory Revert",get_rc_nok())
 		else :
 			return record_status("Config Factory Revert",get_rc_ok())
-	def mpio_alias(self):
-		output = 'SUCCESS'
-		for alias in self._mpio_alias.keys():
-			if not alias:
-				break
-			wwid = self._mpio_alias[alias]
-			if not wwid :
-				continue
-			if isinstance(wwid, basestring):
-				wwid = self._mpio_alias[alias].lower()
-			else:
-				message ( "Correct wwid %s for alias %s " % (wwid,alias),{'style': 'ERROR'}  )
-				
-			message ( "Aliasing %s on %s" % (wwid,alias),{'to_trace': '1' ,'style': 'TRACE'}  )
-			count = 10
-			while count > 0 :
-				current_multipaths = self._ssh_session.executeCli('tps multipath show')
-				message ( "Current multipaths on %s = %s" % (self._name,current_multipaths),{'to_trace': '1' ,'style': 'TRACE'}  )
-				#output += current_multipaths 
-				if wwid in current_multipaths:
-					full_output =  self._ssh_session.executeCli('mpio multipaths alias %s wwid %s' % (alias,wwid),wait=30)
-					message ( 'mpio multipaths alias %s wwid %s output = %s' % (alias,wwid,full_output),{'to_trace': '1' ,'style': 'WARN'} )
-					output += full_output.splitlines()[-1]
-					break
-				elif wwid not in current_multipaths:
-					count = count - 1
-					output += self._ssh_session.executeCli('tps multipath show')
-					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (alias,wwid),{'style': 'WARN'} )
-					time.sleep(1)
-					continue
-			if count == 0:
-				output = 'FAIL'
-		return output
-			
+
 	def format_storage(self):
 		output = ''
 		format_option = ""
@@ -680,6 +666,7 @@ UserKnownHostsFile /dev/null
 			ini_format_option = self._tps_fs[fs_name]['format']
 			if ( global_format_forced is False and ini_format_option is False ):
 				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
+				record_status("TPS Formatting",get_rc_skipped())
 				continue
 			
 			count = 10
@@ -691,16 +678,28 @@ UserKnownHostsFile /dev/null
 				if wwid in current_multipaths:
 					if bool(mount_point) and mount_point == 'insta':
 						if self.is_instanode() and self.is_clustermaster():
-							full_output =  self._ssh_session.executeCli('_exec mkfs.ext2 -i 65536 -b 4096 -L %s -v /dev/mapper/%s' % (fs_name,fs_name),wait=30)
-							output += full_output.splitlines()[-1]
-							break
+							try:
+								full_output =  self._ssh_session.executeCli('_exec mkfs.ext2 -i 65536 -b 4096 -L %s -v /dev/mapper/%s' % (fs_name,fs_name),wait=30)
+								output += full_output.splitlines()[-1]
+								record_status("INSTA LUN Formatting",get_rc_ok())
+								break
+							except Exception, err:
+								message ("INSTA LUN Formatting failure %s"%str(err),{'to_trace': '1' ,'style': 'DEBUG'})
+								record_status("INSTA LUN Formatting",get_rc_skipped())
+								break
 						else :
 							message ( "Skipping insta LUN %s format on %s" % (fs_name,self._name),{'style': 'INFO'}  )
 							break
 					else:
-						full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
-						output += full_output.splitlines()[-1]
-						break
+						try:						
+							full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
+							output += full_output.splitlines()[-1]
+							record_status("TPS Formatting",get_rc_ok())
+							break
+						except Exception,err:
+							message ( "Skipping LUN %s format on %s" % (fs_name,self._name),{'style': 'INFO'}  )
+							record_status("TPS Formatting",get_rc_error())
+							break
 				elif wwid not in current_multipaths:
 					count = count - 1
 					output += self._ssh_session.executeCli('tps multipath show')
@@ -932,7 +931,48 @@ UserKnownHostsFile /dev/null
 			return get_rc_ok()
 		else:
 			return get_rc_nok()
-	
+
+	def mpio_alias(self):
+		output = 'SUCCESS'
+		for alias in self._mpio_alias.keys():
+			if not alias:
+				break
+			wwid = self._mpio_alias[alias]
+			if not wwid :
+				continue
+			if isinstance(wwid, basestring):
+				wwid = self._mpio_alias[alias].lower()
+			else:
+				message ( "Correct wwid %s for alias %s " % (wwid,alias),{'style': 'ERROR'}  )
+				record_status ( "MPIO aliasing",get_rc_error() )
+				
+			message ( "Aliasing %s on %s" % (wwid,alias),{'to_trace': '1' ,'style': 'TRACE'}  )
+			count = 10
+			while count > 0 :
+				current_multipaths = self._ssh_session.executeCli('tps multipath show')
+				message ( "Current multipaths on %s = %s" % (self._name,current_multipaths),{'to_trace': '1' ,'style': 'TRACE'}  )
+				#output += current_multipaths 
+				if wwid in current_multipaths:
+					count = count - 1
+					full_output =  self._ssh_session.executeCli('mpio multipaths alias %s wwid %s' % (alias,wwid),wait=30)
+					message ( 'mpio multipaths alias %s wwid %s output = %s' % (alias,wwid,full_output),{'to_trace': '1' ,'style': 'WARN'} )
+					output += full_output.splitlines()[-1]
+					current_multipaths = self._ssh_session.executeCli('tps multipath show')
+					if alias in current_multipaths:
+						record_status ( "MPIO aliasing",get_rc_ok() )
+					else :
+						record_status ( "MPIO aliasing",get_rc_nok() )
+					break
+				elif wwid not in current_multipaths:
+					count = count - 1
+					output += self._ssh_session.executeCli('tps multipath show')
+					message ( "waiting for %s lun with wwid=%s to come in multipath. retrying in 1 sec" % (alias,wwid),{'style': 'WARN'} )
+					time.sleep(1)
+					continue
+			if count == 0:
+				record_status ( "MPIO aliasing",get_rc_error() )
+		return get_rc_ok()
+
 	def pingable(self,host):  
 		try:
 			if (os.name == "posix"):
@@ -1053,19 +1093,23 @@ UserKnownHostsFile /dev/null
 		try:
 			output += self._ssh_session.executeCli('logging files rotation force')
 		except Exception ,err:
-			return record_status("Logrotation Install",get_rc_error())
+			message ("Exception in log rotation %s") % str(err),{'to_trace':1,'style':'TRACE'}
+			return record_status("Log rotation",get_rc_error())
 		if output.isspace():
-			return get_rc_ok()
+			return record_status("Log rotation",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("Log rotation",get_rc_nok())
 
 	def setSnmpServer(self):
 		output = ''
-		output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		try:
+			output += self._ssh_session.executeCli('snmp-server host %s traps version 2c' %self._snmpsink)
+		except Exception, err:
+			message ("Exception in snmp server config %s") % str(err),{'to_trace':1,'style':'TRACE'}
 		if not output or output.isspace():
-			return get_rc_ok()
+			return record_status("SNMP Configuration",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("SNMP Configuration",get_rc_nok())
 
 
 	def setHostName(self):
@@ -1076,6 +1120,7 @@ UserKnownHostsFile /dev/null
 			output += self._ssh_session.executeCli('config write')
 			response = self._ssh_session.executeCli('_exec mdreq -v query get - /system/hostname')
 		except Exception,err:
+			message ("Exception in setting hostname %s") % str(err),{'to_trace':1,'style':'TRACE'}
 			return record_status("Configure Hostname",get_rc_error())
 		if response.find( self._name ) != -1:
 			return record_status("Configure Hostname",get_rc_ok())
@@ -1093,12 +1138,16 @@ UserKnownHostsFile /dev/null
 	
 	def setIpHostMaps(self):
 		output = ''
-		for vm in self.nodes_ip.keys():
-			output += self._ssh_session.executeCli('ip host %s %s '%(vm,self.nodes_ip[vm]))
+		try:
+			for vm in self.nodes_ip.keys():
+				output += self._ssh_session.executeCli('ip host %s %s '%(vm,self.nodes_ip[vm]))
+		except Exception,err:
+			message ("Exception in mapping ip host %s") % str(err),{'to_trace':1,'style':'TRACE'}
+			return record_status("ip host mapping",get_rc_error())
 		if not output or output.isspace():
-			return get_rc_ok()
+			return record_status("ip host mapping",get_rc_ok())
 		else:
-			return get_rc_nok()
+			return record_status("ip host mapping",get_rc_nok())
 
 	def setclustering(self):
 		output = ''
@@ -1141,51 +1190,56 @@ UserKnownHostsFile /dev/null
 		client_ip = None
 		response = ''
 		cmd = ''
-		response = self._ssh_session.executeCli('internal query  get - /tps/process/hadoop_yarn')
-		if response.find('% No bindings returned.') != -1:
-			pass
-		else:
-			# Assume hadoop yarn is already configured, remove it first
-			cmd = "no register hadoop_yarn\n"
-		cmd += "register hadoop_yarn\n"
-		if self.is_clusternode():
-			HA = 'True'
-			client_ip = self._clusterVIP
-		else:
-			HA = 'False'
-			client_ip = self.nodes_ip[self.name_nodes[0]]
+		try :
+			response = self._ssh_session.executeCli('internal query  get - /tps/process/hadoop_yarn')
+			if response.find('% No bindings returned.') != -1:
+				pass
+			else:
+				# Assume hadoop yarn is already configured, remove it first
+				cmd = "no register hadoop_yarn\n"
+			cmd += "register hadoop_yarn\n"
+			if self.is_clusternode():
+				HA = 'True'
+				client_ip = self._clusterVIP
+			else:
+				HA = 'False'
+				client_ip = self.nodes_ip[self.name_nodes[0]]
+				
+			cmd += "set hadoop_yarn config_ha %s \n" % HA
+			cmd += "set hadoop_yarn namenode1 %s \n" % self.name_nodes[0]
 			
-		cmd += "set hadoop_yarn config_ha %s \n" % HA
-		cmd += "set hadoop_yarn namenode1 %s \n" % self.name_nodes[0]
-		
-		if self.is_clusternode():
-			cmd += "set hadoop_yarn namenode2 %s \n" % self.name_nodes[1]
-			cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
+			if self.is_clusternode():
+				cmd += "set hadoop_yarn namenode2 %s \n" % self.name_nodes[1]
+				cmd += "set hadoop_yarn nameservice %s \n" % self.config_ref['HOSTS']['yarn_nameservice']
+				for node in self.journal_nodes:
+					cmd += "set hadoop_yarn journalnodes %s \n" % node
+				for node in self.name_nodes:
+					cmd += "set hadoop_yarn journalnodes %s \n" % node
+	
 			for node in self.journal_nodes:
-				cmd += "set hadoop_yarn journalnodes %s \n" % node
-			for node in self.name_nodes:
-				cmd += "set hadoop_yarn journalnodes %s \n" % node
-
-		for node in self.journal_nodes:
-			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
-		for node in self.data_nodes:
-			cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
-
-		cmd += "set hadoop_yarn client %s \n" % client_ip
-		cmd += "set hadoop_yarn state UNINIT \n"
-		
-		if os.environ['BACKUP_HDFS'] :
-			cmd += "register backup_hdfs \n"
-			cmd += "set backup_hdfs namenode UNINIT \n"
-			cmd += "set backup_hdfs version HADOOP_YARN \n"
+				cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+			for node in self.data_nodes:
+				cmd += "set hadoop_yarn slave %s \n" % self.nodes_ip[node]
+	
+			cmd += "set hadoop_yarn client %s \n" % client_ip
+			cmd += "set hadoop_yarn state UNINIT \n"
 			
-		output += self._ssh_session.executePmx(cmd)
-		output += self._ssh_session.executeCli('pm process tps restart')
-		message ( "tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
-		if output.find('^') != -1 or output.find('%') != -1:
-			record_status("Manufacturing with ISO",get_rc_ok())
-		else:
-			record_status("Manufacturing with ISO",get_rc_skipped())
+			if os.environ['BACKUP_HDFS'] :
+				cmd += "register backup_hdfs \n"
+				cmd += "set backup_hdfs namenode UNINIT \n"
+				cmd += "set backup_hdfs version HADOOP_YARN \n"
+				
+			output += self._ssh_session.executePmx(cmd)
+			output += self._ssh_session.executeCli('pm process tps restart')
+			message ( "tps restarted in node %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
+			
+			if output.find('^') != -1 or output.find('%') != -1:
+				return record_status("HDFS PMX Configuration",get_rc_nok())
+			else:
+				return record_status("HDFS PMX Configuration",get_rc_ok())
+		except Exception,err:
+			message ( "Cannot configure hdfs in pmx %s " % str(err),{'style': 'NOK'}  )
+			return record_status("HDFS PMX Configuration",get_rc_error())
 
 	def set_clusterMaster(self):
 		output = ''
@@ -1351,7 +1405,7 @@ HOSTNAME=%s
 							password	= passwd
 				self._ssh_session = session(self._ip, username , password)
 				if not os.environ['RPM_MODE'] :
-					self.disable_paging()
+					self.disable_paging()        # This is the first command that runs on a freshly started node.
 					self.disable_timeout()
 				return self._ssh_session
 			else :

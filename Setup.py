@@ -25,6 +25,7 @@ def basic_settings(tuples):
 		message ( "Now going inside VM %s, setting up ssh connections" % vm_name		, {'style': 'DEBUG','to_log':'0',} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
+			record_status("Server startup after fresh manufacture",get_rc_ok())
 			message ( "Rotating Logs in %s =\t\t%s " %(vm_name,vm.rotate_logs())			, {'style': 'INFO'} )
 			if opt_reconfig:
 				message ( "Factory-Revert in %s =\t\t%s " %(vm_name,vm.factory_revert())	, {'style': 'INFO'} )
@@ -39,6 +40,7 @@ def basic_settings(tuples):
 			message ( "Config-Write_Output in %s =\t\t%s " %(vm_name,vm.config_write())	, {'style': 'TRACE','to_trace':'1'} )
 		else :
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
+			record_status("Server startup after fresh manufacture",get_rc_nok())
 			terminate_self("Exiting")
 	return get_rc_ok()
 
@@ -53,7 +55,7 @@ def centos_sync_basic_settings(tuples):
 		threads.append(newThread)
 	for thread in threads:
 			thread.join()
-	return "Success"
+	return get_rc_ok()
 
 def centos_basic_settings(line):
 	host,vm_name = line.split(":")
@@ -75,7 +77,7 @@ def centos_basic_settings(line):
 	else:
 		message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 		terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_cfg_storage(tuples):
 	for line in tuples:
@@ -91,7 +93,7 @@ def centos_cfg_storage(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_checkHDFS(tuples):
 	output = ''
@@ -119,7 +121,7 @@ def centos_sync_install_reflex(tuples):
 		threads.append(newThread)
 	for thread in threads:
 			thread.join()
-	return "Success"
+	return get_rc_ok()
 
 def centos_install_reflex(line):
 	host,vm_name = line.split(":")
@@ -130,7 +132,7 @@ def centos_install_reflex(line):
 	else:
 		message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 		terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_keygen(tuples):
 	for line in tuples:
@@ -141,7 +143,7 @@ def centos_keygen(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_keyshare(tuples):
 	for line in tuples:
@@ -152,7 +154,7 @@ def centos_keyshare(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name	, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_reflex_keygen(tuples):
 	for line in tuples:
@@ -163,7 +165,7 @@ def centos_reflex_keygen(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name	, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_reflex_keyshare(tuples):
 	for line in tuples:
@@ -174,7 +176,7 @@ def centos_reflex_keyshare(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name				, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_setupHDFS(tuples):
 	for line in tuples:
@@ -187,7 +189,7 @@ def centos_setupHDFS(tuples):
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 				terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def centos_setupClusters(tuples):
 	for line in tuples:
@@ -201,7 +203,7 @@ def centos_setupClusters(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")	
-	return "Success"
+	return get_rc_ok()
 
 def clear_ha(tuples):
 	for line in tuples:
@@ -215,7 +217,7 @@ def clear_ha(tuples):
 			vm.registerDataNode()
 		if vm.is_clusternode():
 			vm.unregisterCluster()
-	return "Success"
+	return get_rc_ok()
 
 def collect_yarn_setup_info(tuples):
 	output = ''
@@ -283,7 +285,7 @@ def connect_hosts (hosts):
 		host = Host(config,host_name)
 		config['HOSTS'][host_name]['host_ref'] = host
 		host.connectSSH()
-	return "Success"
+	return get_rc_ok()
 	
 def do_manufacture(hosts):
 	message ( 'Manufacture Option Set', {'style': 'INFO'} ) 
@@ -313,7 +315,7 @@ def do_centosInstall(hosts):
 			threads.append(newThread)
 	for thread in threads:
 			thread.join()
-	return "Success"
+	return get_rc_ok()
 
 def do_upgrade():
 	message ( 'Upgrade Option set', {'style': 'INFO'} ) 
@@ -323,7 +325,7 @@ def do_upgrade():
 		newThread = threading.Thread(target=host.upgradeVMs(), args = (host,))
 	for thread in threads:
 		thread.join()
-	return "Success"
+	return get_rc_ok()
 
 def exit_cleanup(signal, frame):
 	message ( 'Caught signal %s.. Cleaning Up'% signal, {'style': 'INFO'} ) 
@@ -358,7 +360,7 @@ def generate_keys(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def get_hosts(config):
 	hosts = []	
@@ -410,8 +412,8 @@ def get_rubixvms(config):
 	return tuples
 
 def manuf_VMs(host):
-	message (  "Enabling Virtualisation in %s = \t\t[%s]" % ( host.getname(),host.enableVirt())			,{'style': 'INFO'} )
-	message (  "NTP Syncing in %s  = \t\t[%s] " % ( host.getname(),host.synctime())						,{'style': 'INFO'} )
+	message (  "Enabling Virtualisation in %s = \t[%s]" % ( host.getname(),host.enableVirt())			,{'style': 'INFO'} )
+	message (  "NTP Syncing in %s  = \t\t\t[%s] " % ( host.getname(),host.synctime())						,{'style': 'INFO'} )
 	message (  "Configuring DNS in %s = \t\t[%s] " % ( host.getname(),host.setDNS())					,{'style': 'INFO'} )
 	message (  "IP Host Mapping in %s  = \t\t[%s] " % ( host.getname(),host.vmHostMaps())				,{'style': 'INFO'} )
 	if opt_lazy:
@@ -427,10 +429,10 @@ def manuf_VMs(host):
 		message (  "MFG CD iso fetch = \t\t[%s]"		% host.getMfgCd()			,{'style': 'INFO'} )
 		message (  "Deleting old templates = \t\t[%s]"	% host.delete_template()	,{'style': 'INFO'} )
 		message (  "Create-Template_Output = \t\t[%s]"	% host.create_template()	,{'style': 'INFO'} )
-	message ( "DeleteVMs_Output = [%s]"			% host.deleteVMs()				,{'style': 'INFO'} )
-	message ( "DeclareVMs_Output = [%s]" 		% host.declareVMs()				,{'style': 'TRACE','to_trace':'1'} )
-	message ( "CreateVMs_Output = [%s]" 		% host.instantiateVMs()			,{'style': 'INFO'} )
-	message ( "PowerON-VMs_Output = [%s]" 		% host.startVMs()				,{'style': 'INFO'} )
+	message ( "VM Deletion Status = \t\t\t[%s]"			% host.deleteVMs()				,{'style': 'INFO'} )
+	message ( "DeclareVMs_Output = \t\t[%s]" 		% host.declareVMs()				,{'style': 'TRACE','to_trace':'1'} )
+	message ( "VM Creation Status = \t\t[%s]" 		% host.instantiateVMs()			,{'style': 'INFO'} )
+	message ( "Powering ON VMs Status = \t\t[%s]" 	% host.startVMs()				,{'style': 'INFO'} )
 	return get_rc_ok()
 
 def manuf_Centos_VMs(host):
@@ -463,7 +465,7 @@ def objectify_vms(tuples):
 		if not config['HOSTS'][host][vm_name]['vm_ref']:
 			vm = vm_node(config,host,vm_name)
 			config['HOSTS'][host][vm_name]['vm_ref'] = vm
-	return "Success"
+	return get_rc_ok()
 
 def shareKeys(tuples):
 	for line in tuples:
@@ -477,7 +479,7 @@ def shareKeys(tuples):
 		else:
 			message ( "SSH capability on %s not working." % vm_name								, {'style': 'DEBUG'} )
 			terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def setupClusters(tuples):
 	for line in tuples:
@@ -495,7 +497,7 @@ def setupClusters(tuples):
 			message ( "SSH capability on %s not working." % vm_name					, {'style': 'DEBUG'} )
 			terminate_self("Exiting")
 			
-	return "Success"
+	return get_rc_ok()
 
 def setupStorage(tuples):
 	for line in tuples:
@@ -509,6 +511,8 @@ def setupStorage(tuples):
 					message ("Multipath LUN-Aliasing in %s = \t%s" % (vm_name,vm.mpio_alias())	 		,{'style': 'INFO'} )
 					if not opt_skip_format :
 						message ( "Storage LUN Format in %s = \t%s" % (vm_name,vm.format_storage()) 	,{'style': 'INFO'} )
+					else:
+						record_status("STORAGE Operations",get_rc_skipped())
 					message ( "Gmountd Configuration in %s = \t%s" % (vm_name,vm.mount_storage())		,{'style': 'INFO'} )
 					message ( "Config-Write_Output in %s = %s" % (vm_name,vm.config_write())			,{'style': 'TRACE','to_trace':'1'} )
 				else:
@@ -529,7 +533,7 @@ def setupHDFS(tuples):
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'DEBUG'} )
 				terminate_self("Exiting")
-	return "Success"
+	return get_rc_ok()
 
 def validate(config):
 	validator = Validator()
@@ -550,7 +554,7 @@ def wipe_vmpool(hosts):
 	for host_name in hosts:
 		host = config['HOSTS'][host_name]['host_ref']
 		message ( "WipeSetup_Output = %s " %host.wipe_setup()             , {'style': 'INFO'} )
-		return "Success"
+		return get_rc_ok()
 
 
 '''

@@ -43,12 +43,16 @@ class session(object):
 				message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'OK'}  )
 			except Exception, e:
 				message ( "session init FAILED for host %s@%s %s" % (self._username,self._host,str(e)),{'to_trace': '1' ,'style': 'NOK'}  )
+				raise
 	@property
 	
 	def __del__(self):
-		if self.session != None:
-			message ( "session del for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
-			self.session.close()
+		try:
+			if self.session:
+				message ( "session del for  %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				self.session.close()
+		except Exception, err:
+			message ( "error deleting session del for %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 
 	def _cmd_fix_input_data(self, input_data):
 		if input_data is not None:
@@ -117,6 +121,7 @@ class session(object):
 				message ( "shell invoke on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.chan.settimeout(1200)
 				self.chan.set_combine_stderr(True)
+				self.chan.send_ready()
 				return
 			except socket.error, (value):
 				message ( "SSH Connection refused, will retry in 5 seconds", { 'style': 'DEBUG' } )
@@ -130,6 +135,15 @@ class session(object):
 				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
 				time.sleep(5)
 				retry -= 1
+			except AttributeError,err:
+				message ( 'ssh channel Attribute Error from Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
+				time.sleep(5)
+				retry -= 1
+			except Exception:
+				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
+				time.sleep(5)
+				retry -= 1
+		return False
 
 	def close(self):
 		self.chan.close()
@@ -334,28 +348,32 @@ class session(object):
 		prompt = False
 		while not prompt and retry > 0 :
 			retry = retry - 1
-			while timeOut > 0:
-				self.write("")
-				buff = self._read()
-				if buff is not None:
-					lines = buff.splitlines()
-				else:
-					continue
-				if len(lines) > 0:
-					buff = lines[-1]
-					if buff and not buff.isspace():   # the string is non-empty
-						got_prompt = True
-						break
+			try:
+				while timeOut > 0:
+					self.write("")
+					buff = self._read()
+					if buff is not None:
+						lines = buff.splitlines()
+					else:
+						continue
+					if len(lines) > 0:
+						buff = lines[-1]
+						if buff and not buff.isspace():   # the string is non-empty
+							got_prompt = True
+							break
+						else :
+							timeOut = timeOut - 1
 					else :
 						timeOut = timeOut - 1
+				if got_prompt:
+					prompt = self.tellPrompt(buff)
 				else :
-					timeOut = timeOut - 1
-			if got_prompt:
-				prompt = self.tellPrompt(buff)
-			else :
-				message ( "Cannot to decide the Prompt. Buffer = %s ... %s retries left " %(buff,retry), {'to_log':1 , 'style': 'DEBUG'} ) 
+					message ( "Cannot to decide the Prompt. Buffer = %s ... %s retries left " %(buff,retry), {'to_log':1 , 'style': 'DEBUG'} ) 
+			except Exception, err:
+				message ( "Giving another chance to guess Prompt.", {'style': 'DEBUG'} ) 
 		if not prompt :
-			message ( "Giving up on getting Prompt.", {'to_log':1 , 'style': 'DEBUG'} ) 
+			message ( "Giving up on finding Prompt.", {'to_log':1 , 'style': 'DEBUG'} )
+			terminate_self("Giving up on finding Prompt.")
 		return prompt   
 
 
@@ -410,7 +428,7 @@ class session(object):
 						break
 			else :
 				if not alerted:
-					message ( "Prompt not responding in %s for %s"%(self._host,cmd),{'to_stdout':1, 'to_log':1 , 'style': 'TRACE'})
+					message ( "Prompt not responding in %s for %s"%(self._host,cmd),{'to_stdout':0, 'to_log':1 , 'style': 'TRACE'})
 					alerted = 1
 				else :
 					message ( "sending newline again",{'to_trace':1, 'style': 'TRACE'})
@@ -490,25 +508,23 @@ class session(object):
 		timeOut = 60
 		sent_data = False
 		while timeOut > 0 :
-			if self.chan.send_ready():
-				self.current_send_string = cmd	
-				self.chan.send(cmd + self.newline )
-				sent_data = True
-				break
-			else:
-				time.sleep(0.5)
-				timeOut = timeOut - 1
-		try:
-			if sent_data:
-				return True
-		except Exception:
-			message ( "Unable to write cmd %s to Channel (Channel not Ready)"%cmd,
-					 {'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}
-					 ) 
-			return False
+			try:
+				if self.chan.send_ready():
+					self.current_send_string = cmd	
+					self.chan.send(cmd + self.newline )
+					sent_data = True
+					break
+				else:
+					time.sleep(0.5)
+					timeOut = timeOut - 1
+				if sent_data:
+					return True
+			except Exception:
+				message ( "Unable to write cmd %s to Channel (Channel not Ready)"%cmd,{'style': 'FATAL'}) 
+				return False
 
 if __name__ == '__main__':
-	ssh_session = session('192.168.173.211', username='admin', password='admin@123')
+	ssh_session = session('192.168.172.211', username='admin', password='admin@123')
 	prompt = ssh_session.getPrompt()
 	print prompt
 	

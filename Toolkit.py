@@ -55,6 +55,20 @@ def get_failure():
 def get_error():
 	return int(test_status['ERROR'])
 
+def get_max_rc_status(status1,status2):
+	"""
+	get_max_rc_status(status1,status2) : eg (get_rc_nok(),get_rc_ok()) will return exit status of get_rc_nok()
+	"""
+	if status1 == None or status2 == None:
+		return
+	else:
+		sev1 = _rc_severity(status1)
+		sev2 = _rc_severity(status2)
+		if sev1 > sev2 :
+			return status1
+		else:
+			return status2
+
 def get_rc_skipped():
 	return 'SKIPPED'
 
@@ -399,6 +413,7 @@ def record_status(test_string,mystatus):
 	'header','status': status = success / fail / skipped / error 
 	eg: record_status ( " Test Case %s ." % self._name,'success' )
 	"""
+	message ( "RECORDKEEPING : %s|%s " % (test_string,mystatus),{'to_trace': '1' ,'style': 'TRACE'}  ) 
 	if not test_string:
 		return
 	if not mystatus:
@@ -449,7 +464,7 @@ def sprintf_warning():
     return Fore.CYAN +	Back.BLUE +		Style.BRIGHT +	"WARN" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_debug():
-    return Fore.CYAN +Back.BLACK +		Style.BRIGHT +	"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
+    return Fore.CYAN + Back.BLACK +		Style.BRIGHT +	"DEBUG" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
 
 def sprintf_fatal():
     return Fore.RED +	Back.YELLOW +	Style.BRIGHT +	"FATAL" + Fore.RESET + Back.RESET + Style.RESET_ALL		+ " : "
