@@ -303,9 +303,12 @@ class Host(object):
 			for vm_name in self._vms:
 				vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
 				output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
-				return get_rc_ok()
 		except Exception:
 			return get_rc_error()
+		if output.find('%') != -1:
+			return get_rc_nok()
+		else:
+			return get_rc_ok()
 
 	def wipe_setup(self):
 		output = ''

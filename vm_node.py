@@ -790,19 +790,19 @@ UserKnownHostsFile /dev/null
 	def hdfs_report(self):
 		output = ''
 		checkScript = os.environ["ROBOT_PATH"] + "/" + "extras/yarn-config-check.sh"
-		#try :
-		self._ssh_session.transferFile(checkScript,"/tmp")
-		#except Exception:
-		#	message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s" % self._name ,{'style':'NOK'})
-		#	return False
+		try :
+			self._ssh_session.transferFile(checkScript,"/tmp")
+		except Exception,err:
+			message ("Cannot copy file yarn-config-check.sh in /tmp/ of %s %s" % (self._name,str(err)) ,{'style':'NOK'})
+			return get_rc_error()
 		try:
 			if os.environ['RPM_MODE'] :
 				output += self._ssh_session.executeShellasUser('reflex','/tmp/yarn-config-check.sh',wait=5,timeout=30)
 			else :
 				output += self._ssh_session.executeCli('_exec /tmp/yarn-config-check.sh')
 			return output
-		except Exception:
-			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % self._name ,{'style':'NOK'})
+		except Exception,err:
+			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % (self._name,str(err)) ,{'style':'NOK'})
 
 	def hostid_generator(self):
 		return ''.join([random.choice('0123456789abcdef') for x in range(12)])

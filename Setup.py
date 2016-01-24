@@ -706,6 +706,9 @@ if __name__ == '__main__':
 		if opt_wipe and opt_reconfig:
 			message ( "Wipe and Reconfig cannot be used together.",						{'style':'FATAL'} )
 			sys.exit(1)
+		if opt_lazy and opt_reconfig:
+			message ( "Lazy and Reconfig cannot be used together.",						{'style':'FATAL'} )
+			sys.exit(1)
 		if not opt_lazy and not opt_reconfig and not opt_rpm :
 			message ( "Verifying iso exists.",			{'style':'INFO'} )
 			if not check_iso_exists(config):
