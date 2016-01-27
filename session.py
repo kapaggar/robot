@@ -105,17 +105,18 @@ class session(object):
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
 		retry = 5
-		self.session = paramiko.SSHClient()
-		self.session.load_host_keys(os.path.expanduser("/dev/null"))
-		#self.session.load_system_host_keys()
-		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		while retry > 0:
 			try:
-				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
+				self.session = paramiko.SSHClient()
+				self.session.load_host_keys(os.path.expanduser("/dev/null"))
+				#self.session.load_system_host_keys()
+				self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+				message ( "making coonection on host %s@%s" % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False,timeout=60,banner_timeout=60)
 				message ( "connect on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.transport = self.session.get_transport()
 				self.transport.set_keepalive(5)
-				message ( "transport on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "transport on host %s@%s ok" % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				#self.transport.set_keepalive(15)
 				self.chan = self.session.invoke_shell()
 				message ( "shell invoke on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
@@ -123,24 +124,23 @@ class session(object):
 				self.chan.set_combine_stderr(True)
 				self.chan.send_ready()
 				return
-			except socket.error, (value):
-				message ( "SSH Connection refused, will retry in 5 seconds", { 'style': 'DEBUG' } )
-				time.sleep(5)
+			except (paramiko.SSHException, EOFError, AttributeError):
+				message ( "SSH shell invoke refused, will retry in 10 seconds", { 'style': 'DEBUG' } )
+				time.sleep(10)
 				retry -= 1
+			except socket.error, (value):
+				message ( "SSH Connection refused, will retry in 10 seconds", { 'style': 'DEBUG' } )
+				time.sleep(10)
+				retry -= 1
+			except	paramiko.AuthenticationException:
+				message ( 'Incorrect password %s for %s in %s'%(self._username,self._password,self._host), {'style': 'TRACE'} ) 
+				terminate_self("Exiting")
 			except paramiko.BadHostKeyException:
 				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, { 'style': 'FATAL' } ) 
 				message ( 'Edit  ~/.ssh/known_hosts file to remove the entry and try again', {'style': 'TRACE'} ) 
 				terminate_self("Exiting")
-			except EOFError:
-				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
-				time.sleep(5)
-				retry -= 1
-			except AttributeError,err:
-				message ( 'ssh channel Attribute Error from Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
-				time.sleep(5)
-				retry -= 1
-			except Exception:
-				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
+			except Exception,err:
+				message ( 'Unexpected Error %s from SSH Connection, retrying in 5 seconds'%str(err), { 'style': 'DEBUG' } ) 
 				time.sleep(5)
 				retry -= 1
 		return False

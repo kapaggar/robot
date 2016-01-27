@@ -16,7 +16,7 @@ from Toolkit import *
 from pprint import pprint
 
 hosts = list()
-hdfs_report = ''
+hdfs_report = []
 setup_yarn_info = []
 
 def basic_settings(tuples):
@@ -221,6 +221,7 @@ def clear_ha(tuples):
 
 def collect_yarn_setup_info(tuples):
 	output = ''
+	response = ''
 	for line in tuples:
 		host,vm_name = line.split(":")
 		message ( "Now checking yarn info inside VM %s" % vm_name,{'style': 'DEBUG'} )
@@ -229,7 +230,7 @@ def collect_yarn_setup_info(tuples):
 			if vm.ssh_self():
 				response = vm.get_yarn_info()
 				if response:
-					message ("Show yarn Info in %s = \t\t%s]" % (vm_name,response),{'style': 'INFO'} )
+					message ("Show yarn Info in %s = \t%s" % (vm_name,response),{'style': 'INFO'} )
 					output += response
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
@@ -244,12 +245,17 @@ def checkHDFS(tuples):
 		if vm.is_namenode():
 			if vm.ssh_self():
 				response = vm.validate_HDFS()
-				if response:
-					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, response),{'style': 'INFO'} )
-					output += response
+				if not response :
+					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, record_status("HDFS Current Status",get_rc_error())),{'style': 'NOK'} )
+				if response.find('ERROR') != -1 :
+					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, record_status("HDFS Current Status",get_rc_error())),{'style': 'NOK'} )
+				elif response.find('SKIPPED') != -1 :
+					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, record_status("HDFS Current Status",get_rc_skipped())),{'style': 'INFO'} )
+				else :
+					message ("Check-HDFS_Output in %s = \t\t%s" %(vm_name, record_status("HDFS Current Status",get_rc_ok())),{'style': 'OK'} )
+					hdfs_report.append(monospace_text(br_text_to_html(response)))
 			else:
 				message ( "SSH capability on %s not working." % vm_name, {'style': 'Debug'} )
-	return output
 
 def checkColSanity(tuples):
 	output = ''
@@ -593,6 +599,11 @@ if __name__ == '__main__':
 						action='store_true',
 						default=False,
 						help='Just validate INI file')
+	parser.add_argument("--rpm",
+						dest='rpm_model',
+						action='store_true',
+						default=False,
+						help='Test Platform rpm model')
 	parser.add_argument("--lazy",
 						dest='lazy',
 						action='store_true',
@@ -602,7 +613,7 @@ if __name__ == '__main__':
 						dest='reconfig',
 						action='store_true',
 						default=False,
-						help='Skip manuf. VMS . Just factory revert and apply INI')
+						help='Skip manufacturing. Factory revert and apply INI')
 	parser.add_argument("--no-storage",
 						dest='storage',
 						action='store_false',
@@ -633,31 +644,39 @@ if __name__ == '__main__':
 						action='store_true',
 						default=False,
 						help='Delete Host\'s complete VM-Pool in initialisation')
-	parser.add_argument("--no-backup-hdfs",
+	parser.add_argument("--backup-hdfs",
 						dest='backup_hdfs',
-						action='store_false',
-						default=True,
-						help='Skip configuring backup hdfs if configuring yarn')
+						action='store_true',
+						default=False,
+						help='Configure backup hdfs also in collector-config')
 	parser.add_argument("--col-sanity",
 						dest='col_sanity',
 						action='store_true',
 						default=False,
-						help='Execute Collector Sanity test-suite')
+						help='Execute Collector Sanity test-suite too.')
 	parser.add_argument("--col-sanity-only",
 						dest='col_sanity_only',
 						action='store_true',
 						default=False,
-						help='Execute Only Collector Sanity test-suite. Implies that setup is collector ready')
+						help='Run Collector Sanity test-suite only')
 	parser.add_argument("--email",
 						dest='email',
 						action='store_true',
 						default=False,
 						help='Send results and report in email')
-	parser.add_argument("--rpm",
-						dest='rpm_model',
-						action='store_true',
+	parser.add_argument("--mail_subject",
+						nargs=1,
+						dest='mail_subject',
+						type=str,
+						default=['Hubrix Notification'],
+						help='Send hubrix notification with this subject')
+	parser.add_argument("--mail_cc",
+						nargs='*',
+						dest='mail_cc',
+						metavar='Recipient',
+						type=str,
 						default=False,
-						help='Test Platform rpm model')
+						help='Add extra email recipients to INI configuration')
 	parser.add_argument("--skip-vm",
 						nargs='+',
 						dest='skip_vm',
@@ -673,6 +692,8 @@ if __name__ == '__main__':
 	opt_hdfs				= args.setup_hdfs
 	opt_wipe				= args.wipe_host
 	opt_skipvm				= args.skip_vm
+	opt_mail_subject		= args.mail_subject[0]
+	opt_mail_recievers		= args.mail_cc
 	opt_lazy				= args.lazy
 	opt_checkini			= args.checkini
 	opt_reconfig			= args.reconfig
@@ -681,7 +702,7 @@ if __name__ == '__main__':
 	opt_colsanity_only		= args.col_sanity_only
 	opt_email				= args.email
 	opt_rpm					= args.rpm_model
-	os.environ['BACKUP_HDFS'] = ("", "True")[opt_backuphdfs]
+	os.environ['BACKUP_HDFS'] = ("", "False")[opt_backuphdfs]
 	os.environ['RPM_MODE']	= ("", "True")[opt_rpm]
 	allvms = None
 	if args.log:
@@ -692,8 +713,14 @@ if __name__ == '__main__':
 		message ( "INI file %s doesnot exists."%(config_filename) ,	{'style':'FATAL'} )
 		sys.exit(1)
 	configspec='config.spec'
-	config = ConfigObj(config_filename,list_values=True,interpolation=True,configspec=configspec)
+	config = ConfigObj(config_filename,raise_errors=False,list_values=True,interpolation=True,configspec=configspec)
 	validate(config)
+	config['HOSTS']['notifySubject'] = opt_mail_subject
+	if isinstance(opt_mail_recievers, list):
+		for recipient in opt_mail_recievers:
+			config['HOSTS']['notifyTo'].append(recipient) 
+		
+
 	if opt_checkini :
 		exit()
 	if not opt_colsanity_only :
@@ -721,8 +748,7 @@ if __name__ == '__main__':
 		message ( "Will be running Collector Test-Suite Only",			{'style':'INFO'} )
 
 	hosts = get_hosts(config)
-	install_type = config['HOSTS']['install_type']
-	
+	install_type = config['HOSTS']['install_type']	
 	if opt_force_format:
 		config['HOSTS']['force_format'] = True
 	else:
@@ -770,6 +796,7 @@ if __name__ == '__main__':
 
 	allvms = get_allvms(config)
 	objectify_vms(allvms)
+
 	####terminate_self("Exiting")
 	
 			#+--------------------------+
@@ -788,8 +815,8 @@ if __name__ == '__main__':
 			setupStorage(allvms)
 		if opt_hdfs is True:
 			setupHDFS(allvms)
-			setup_yarn_info.append(collect_yarn_setup_info(allvms))
-			hdfs_report = checkHDFS(allvms)
+			setup_yarn_info.append(monospace_text(br_text_to_html(collect_yarn_setup_info(allvms))))
+			checkHDFS(allvms)
 			config_collector(allvms)
 		else:
 			record_status("HDFS Current Status",get_rc_skipped())
@@ -825,8 +852,10 @@ if __name__ == '__main__':
 		message ('Sending out emails: ' ,{'style' : 'info'})
 		attachment = collect_results()
 		hdfs_html_report = HTML.Table(header_row=['hdfs dfsadmin report'])
-		hdfs_html_report.rows.append([setup_yarn_info])
-		notify_email(config,str(hdfs_html_report),attachment)
+		hdfs_html_report.rows.append(setup_yarn_info)
+		yarn_config_report = HTML.Table(header_row=['yarn config check'])
+		yarn_config_report.rows.append(hdfs_report)
+		notify_email(config,str(hdfs_html_report)+str(yarn_config_report),attachment)
 		clean_results(attachment)
 	else :
 		message ('Not sending out emails' ,{'style' : 'info'})

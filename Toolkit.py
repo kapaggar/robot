@@ -11,8 +11,8 @@ from Email import Email
 from colorama import Fore, Back, Style
 
 __all__ =  ['clean_results','collect_results','clear_collector_logs','collector_results','display_testresults','get_nightly',
-			'get_rc_skipped','get_rc_ok','get_rc_nok','get_rc_error','check_iso_exists','get_system_date','get_startProcess',
-			'message','record_status','premailer','notify_email','terminate_self']
+			'get_rc_severity','get_rc_skipped','get_rc_ok','get_rc_nok','get_rc_error','get_skipped','get_success','get_failure','get_error','check_iso_exists','get_system_date','get_startProcess',
+			'message','record_status','premailer','notify_email','terminate_self','br_text_to_html','monospace_text']
 
 logfile_name	= ''
 tracefile_name	= ''
@@ -27,7 +27,7 @@ mail_report_buffer = {}
 def _get_exit_status():
 	return {'SKIPPED':'0','SUCCESS':'1','FAIL':'2','ERROR':'3'}
 
-def _rc_severity(status):
+def get_rc_severity(status):
 	return_code_severity = _get_exit_status()
 	return return_code_severity.get(status) and return_code_severity[status]
 
@@ -62,8 +62,8 @@ def get_max_rc_status(status1,status2):
 	if status1 == None or status2 == None:
 		return
 	else:
-		sev1 = _rc_severity(status1)
-		sev2 = _rc_severity(status2)
+		sev1 = get_rc_severity(status1)
+		sev2 = get_rc_severity(status2)
 		if sev1 > sev2 :
 			return status1
 		else:
@@ -377,6 +377,7 @@ def message(message_string,arg_ref):
 def notify_email(config,msg,attachment=None):
 	notifyFrom		= config['HOSTS']['notifyFrom']
 	notifyTo		= config['HOSTS']['notifyTo']
+	notifySubject	= config['HOSTS']['notifySubject']
 	email_msg		= premailer()
 	email_msg 		+= "\n\tlogfile and trace file for the run attached\n"
 	email_msg		+= str(msg)
@@ -384,19 +385,25 @@ def notify_email(config,msg,attachment=None):
 	notify.setFrom(notifyFrom)
 	for email_address in notifyTo:
 		notify.addRecipient(email_address)
-	notify.setSubject("Hubrix notification")
+	notify.setSubject(notifySubject)
 	notify.setHtmlBody(email_msg)
-	notify.setTextBody(email_msg)
+	#notify.setTextBody(email_msg)
 	if attachment:
 		notify.addAttachment(attachment)
 	return notify.send()
 
+def br_text_to_html(msg="\n"):
+	return msg.replace('\n', '<br/>')
+
+def monospace_text(msg="<br/>"):
+	return '<pre style="font-family: consolas,monospace;font-size:8pt" >' + msg + '</pre>'
+	
 def premailer():
 	result_colors = {
-		'SUCCESS':      'lime',
-		'FAIL':      'red',
-		'ERROR':        'yellow',
-		'SKIPPED':      'silver',
+		'SUCCESS'	:	'lime',
+		'FAIL'		:	'red',
+		'ERROR'		:	'yellow',
+		'SKIPPED'	:	'silver',
 	}
 	myTable = HTML.Table(header_row=['Test Executed', 'Results'])
 	for test_id in test_table:
@@ -421,8 +428,8 @@ def record_status(test_string,mystatus):
 	status = mystatus.upper()
 	most_severe_status = test_table.get(test_string,None)
 	if most_severe_status and status != most_severe_status:
-		my_severity = _rc_severity(status)
-		older_severity = _rc_severity(test_table[test_string])
+		my_severity = get_rc_severity(status)
+		older_severity = get_rc_severity(test_table[test_string])
 		if (my_severity < older_severity):
 			return status
 

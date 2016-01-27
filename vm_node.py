@@ -656,6 +656,7 @@ UserKnownHostsFile /dev/null
 	def format_storage(self):
 		output = ''
 		format_option = ""
+		my_rc_status = []
 		global_format_forced = self.config_ref['HOSTS']['force_format']
 		if global_format_forced:
 			format_option += "no-strict"
@@ -667,6 +668,7 @@ UserKnownHostsFile /dev/null
 			if ( global_format_forced is False and ini_format_option is False ):
 				message ( "Skipping format in FS %s on %s" % (fs_name,self._name),{'to_trace': '1' ,'style': 'TRACE'}  )
 				record_status("TPS Formatting",get_rc_skipped())
+				my_rc_status.append(get_rc_skipped())
 				continue
 			
 			count = 10
@@ -682,31 +684,44 @@ UserKnownHostsFile /dev/null
 								full_output =  self._ssh_session.executeCli('_exec mkfs.ext2 -i 65536 -b 4096 -L %s -v /dev/mapper/%s' % (fs_name,fs_name),wait=30)
 								output += full_output.splitlines()[-1]
 								record_status("INSTA LUN Formatting",get_rc_ok())
+								my_rc_status.append(get_success())
 								break
 							except Exception, err:
 								message ("INSTA LUN Formatting failure %s"%str(err),{'to_trace': '1' ,'style': 'DEBUG'})
 								record_status("INSTA LUN Formatting",get_rc_skipped())
+								my_rc_status.append(get_skipped())
 								break
 						else :
 							message ( "Skipping insta LUN %s format on %s" % (fs_name,self._name),{'style': 'INFO'}  )
+							my_rc_status.append(get_skipped())
 							break
 					else:
 						try:						
 							full_output =  self._ssh_session.executeCli('tps fs format wwid %s %s label %s' % (wwid,format_option,fs_name),wait=30)
-							output += full_output.splitlines()[-1]
-							record_status("TPS Formatting",get_rc_ok())
+							if full_output.find('ailed') != -1:
+								message ( "LUN %s format failed on %s due to %s" % (fs_name,self._name,full_output),{'style': 'INFO'}  )
+								record_status("TPS Formatting",get_rc_nok())
+								my_rc_status.append(get_failure())	
+							else:
+								output += full_output.splitlines()[-1]
+								record_status("TPS Formatting",get_rc_ok())
+								my_rc_status.append(get_success())
 							break
 						except Exception,err:
-							message ( "Skipping LUN %s format on %s" % (fs_name,self._name),{'style': 'INFO'}  )
+							message ( "Skipping LUN %s format on %s due to %s" % (fs_name,self._name,str(err)),{'style': 'INFO'}  )
 							record_status("TPS Formatting",get_rc_error())
+							my_rc_status.append(get_error())
 							break
 				elif wwid not in current_multipaths:
 					count = count - 1
 					output += self._ssh_session.executeCli('tps multipath show')
-					message ( " %s lun with wwid=%s still not in multipath. retrying in 1 sec" % (fs_name,wwid),{'style': 'INFO'} )
-					time.sleep(1)
+					message ( " %s lun with wwid=%s still not in multipath. retrying in 5 sec" % (fs_name,wwid),{'style': 'INFO'} )
+					time.sleep(5)
 					continue
-		return output
+			if count == 0:
+				message ( " %s lun with wwid=%s cannot be found in multipath.Giving up" % (fs_name,wwid),{'style': 'NOK'} )
+				my_rc_status.append(get_failure())
+		return get_rc_severity(max(my_rc_status))
 	
 	def getName():
 			return self._name
@@ -803,6 +818,7 @@ UserKnownHostsFile /dev/null
 			return output
 		except Exception,err:
 			message ("Cannot execute file yarn-config-check.sh from /tmp/ of %s" % (self._name,str(err)) ,{'style':'NOK'})
+		return get_rc_error()
 
 	def hostid_generator(self):
 		return ''.join([random.choice('0123456789abcdef') for x in range(12)])
@@ -933,9 +949,11 @@ UserKnownHostsFile /dev/null
 			return get_rc_nok()
 
 	def mpio_alias(self):
-		output = 'SUCCESS'
+		output = ''
+		my_rc_status = [get_skipped()]  # Initialise the return status with skipped
 		for alias in self._mpio_alias.keys():
 			if not alias:
+				my_rc_status.append(get_skipped())
 				break
 			wwid = self._mpio_alias[alias]
 			if not wwid :
@@ -943,8 +961,9 @@ UserKnownHostsFile /dev/null
 			if isinstance(wwid, basestring):
 				wwid = self._mpio_alias[alias].lower()
 			else:
-				message ( "Correct wwid %s for alias %s " % (wwid,alias),{'style': 'ERROR'}  )
+				message ( "Rectify wwid %s for alias %s in INI." % (wwid,alias),{'style': 'ERROR'}  )
 				record_status ( "MPIO aliasing",get_rc_error() )
+				my_rc_status.append(get_error())
 				
 			message ( "Aliasing %s on %s" % (wwid,alias),{'to_trace': '1' ,'style': 'TRACE'}  )
 			count = 10
@@ -960,9 +979,12 @@ UserKnownHostsFile /dev/null
 					current_multipaths = self._ssh_session.executeCli('tps multipath show')
 					if alias in current_multipaths:
 						record_status ( "MPIO aliasing",get_rc_ok() )
+						my_rc_status.append(get_success())
+						break
 					else :
 						record_status ( "MPIO aliasing",get_rc_nok() )
-					break
+						my_rc_status.append(get_failure())
+						break
 				elif wwid not in current_multipaths:
 					count = count - 1
 					output += self._ssh_session.executeCli('tps multipath show')
@@ -971,7 +993,7 @@ UserKnownHostsFile /dev/null
 					continue
 			if count == 0:
 				record_status ( "MPIO aliasing",get_rc_error() )
-		return get_rc_ok()
+		return get_rc_severity(max(my_rc_status))
 
 	def pingable(self,host):  
 		try:
@@ -1376,19 +1398,20 @@ HOSTNAME=%s
 		else:
 			return record_status("MFG DB Configuration",get_rc_nok())
 	
-	def ssh_self(self):
+	def ssh_self(self,timeOut=600):
 		vm_up = False
+		if timeOut < 60:
+			timeOut = 60
 		if not self._ssh_session:           
-			timeOut = 600
 			while timeOut > 0:
 				if self.pingable(self._ip):
 					message ( "VM %s responds from %s " % (self._name,self._ip),				{'style': 'DEBUG'})
 					vm_up = True
 					break
 				else:
-					message ( "Waiting for VM %s %s to come up, sleeping for 5 seconds" % (self._name,self._ip),{'style': 'DEBUG'})
-					time.sleep(5)
-					timeOut = timeOut - 5       
+					message ( "Waiting for VM %s %s to come up, sleeping for 15 seconds" % (self._name,self._ip),{'style': 'DEBUG'})
+					time.sleep(15)
+					timeOut = timeOut - 15       
 			if vm_up :
 				#Find out admin user pass ( if not in config set default)
 				#username = 'admin'
@@ -1437,7 +1460,7 @@ HOSTNAME=%s
 		self.config_ref['HOSTS'][self._host][self._name]['cluster_vip'] = None
 		message ( "unregisterCluster %s " % self._name,{'to_trace': '1' ,'style': 'TRACE'}  )
 
-	def get_yarn_info(self):
+	def get_yarn_info(self,retries=15):
 		if self.is_clusternode() and not self.is_clustermaster():
 			message ("Part of Cluster but not master. skipping node %s" % self._name, {'style':'debug'})
 			return 
@@ -1445,14 +1468,14 @@ HOSTNAME=%s
 		report = ''
 		retry = 0
 		validate_status = False
-		while retry <= 15:
+		while retry < retries:
 			try:
 				res_man = self.is_ResManUp()
 				if res_man :
 					message ("Resource Manager is up in %s" % self._name, {'style':'ok'} )
 					res_manStart = get_startProcess(res_man)
 					message ("Resource Manager is running since %s seconds" % res_manStart, {'style':'info'})
-					if ( res_manStart < 300):
+					if ( res_manStart < 300): # 300 because its "believed" that to get report you should wait 5 mins for dust to settle
 						time2wait = 300 - res_manStart
 						message ("Waiting for %s seconds before running hdfs report" % time2wait, {'style':'info'})
 						time.sleep(time2wait)
@@ -1461,25 +1484,27 @@ HOSTNAME=%s
 					break
 				else:
 					retry += 1
-					message ("Attempt %s. Resource Manager is not running. Waiting total 15 min" % retry, {'style':'WARNING'})
+					message ("Attempt %s. Resource Manager is not running. Waiting total %s min" % (retry,retries), {'style':'WARNING'})
 					time.sleep(60)
 			except Exception:
 				message ("Not able to validate HDFS %s." % output, {'style':'FATAL'})
 				return False
+		if retry == retries:
+			message ("Resource Manager is not running.", {'style':'NOK'})
 		return output
 
 	def validate_HDFS(self):
 		if self.is_clusternode() and not self.is_clustermaster():
 			message ("Skipping standby node %s" % self._name, {'style':'DEBUG'})
+			return record_status("HDFS Current Status",get_rc_skipped())
 		output = ''
 		report = ''
 		message ("Now HDFS config report", {'style':'INFO'})
-		report += str(self.hdfs_report())
-		if report.find('ERROR') != -1 :
-			return record_status("HDFS Current Status",get_rc_nok())
-		else :
-			return record_status("HDFS Current Status",get_rc_ok())
-
+		try:
+			report += str(self.hdfs_report())
+			return report
+		except Exception:
+			return record_status("HDFS Current Status",get_rc_error())
 
 
 if __name__ == '__main__':

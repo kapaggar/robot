@@ -82,16 +82,16 @@ class Host(object):
 				if response.find('not found') != -1:
 					message ( "VM %s not present. Deletion skipped in %s." % (vm_name,self._name) ,{'style': 'OK'}  )
 				else:
-					output = self._host_ssh_session.executeCli('no virt vm %s' % vm_name)
-					if output.find("deleted") != -1:
+					output = self._ssh_session.executeCli('no virt vm %s' % vm_name)
+					if output.isspace() or output.find("deleted") != -1:
 						message ( "%s deleted in %s " % (vm_name,self._name) ,{'style': 'OK'}  )
 						my_return_status = get_rc_ok()
 					else:
 						message ( "%s deletion in %s " % (vm_name,self._name) ,{'style': 'NOK'}  )
-						my_return_status = get_rc_ok()
-			except Exception:
-				message ( "Cannot delete VM %s = %s " %(self._name,output),{'to_trace': '1' ,'style': 'FATAL'}  )
-				my_return_status = get_rc_ok()
+						my_return_status = get_rc_nok()
+			except Exception,err:
+				message ( "Cannot delete VM %s in %s = %s %s" %(vm_name,self._name,output,str(err)),{'to_trace': '1' ,'style': 'FATAL'}  )
+				my_return_status = get_rc_error()
 		return my_return_status
 	
 	def declareVMs(self):
