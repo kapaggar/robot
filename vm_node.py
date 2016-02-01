@@ -1356,10 +1356,10 @@ HOSTNAME=%s
 				message ( "varoffset in set_mfgdb is computed = %s " % var_offset,{'to_trace': '1' ,'style': 'TRACE'}  )
 			else:
 				message ( "Cannot find VarOffset in  set_mfgdb ",{'to_trace': '1' ,'style': 'TRACE'}  )
-				return record_status("MFG DB Configuration",get_rc_error())
+				terminate_self(record_status("MFG DB Configuration",get_rc_error()))
 		except Exception:
 			message ( "error matching varOffset in %s" % self._diskimageFull					, {'style': 'INFO'} )
-			return record_status("MFG DB Configuration",get_rc_error())
+			terminate_self(record_status("MFG DB Configuration",get_rc_error()))
 		
 		offset_bytes = int(var_offset) * 512
 		loop_dev = self._get_loop_device()

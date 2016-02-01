@@ -399,17 +399,24 @@ def monospace_text(msg="<br/>"):
 	return '<pre style="font-family: consolas,monospace;font-size:8pt" >' + msg + '</pre>'
 	
 def premailer():
+	my_test_list = {}
 	result_colors = {
-		'SUCCESS'	:	'lime',
-		'FAIL'		:	'red',
-		'ERROR'		:	'yellow',
-		'SKIPPED'	:	'silver',
+				'SUCCESS'	:	'lime',
+				'FAIL'		:	'red',
+				'ERROR'		:	'yellow',
+				'SKIPPED'	:	'silver',
 	}
-	myTable = HTML.Table(header_row=['Test Executed', 'Results'])
-	for test_id in test_table:
-		color = result_colors[test_table[test_id]]
-		colored_result = HTML.TableCell(test_table[test_id], bgcolor=color)
-		myTable.rows.append([test_id, colored_result])
+	myTable = HTML.Table(header_row=['Sequence','Test Executed', 'Results'])
+
+	for title,val_dict in test_table.iteritems():
+		my_test_list[val_dict['id']]=title
+	
+	for test_id in sorted(my_test_list.keys()):
+		my_status = test_table[my_test_list[test_id]]['status']
+		my_title = my_test_list[test_id]
+		color = result_colors[my_status]
+		colored_result = HTML.TableCell(my_status, bgcolor=color)
+		myTable.rows.append([test_id,my_title, colored_result])
 
 	mySummary = HTML.Table(header_row=['Total','Skipped','Success', 'Failed','Error'])
 	mySummary.rows.append([stats_values(),get_skipped(),get_success(),get_failure(),get_error()])
@@ -426,10 +433,13 @@ def record_status(test_string,mystatus):
 	if not mystatus:
 		return get_rc_skipped()
 	status = mystatus.upper()
-	most_severe_status = test_table.get(test_string,None)
+	if test_table.get(test_string):
+		most_severe_status = test_table[test_string].get('status',None)
+	else:
+		most_severe_status = None
 	if most_severe_status and status != most_severe_status:
 		my_severity = get_rc_severity(status)
-		older_severity = get_rc_severity(test_table[test_string])
+		older_severity = get_rc_severity(test_table[test_string]['status'])
 		if (my_severity < older_severity):
 			return status
 
@@ -443,8 +453,17 @@ def record_status(test_string,mystatus):
 		add_error()
 	else:
 		add_success()
-	test_table[test_string] = status.upper()
+	update_test_table(test_string,status.upper())
+	#test_table[test_string] = status.upper()
 	return status.upper()
+
+def update_test_table(title,status):
+	global test_count
+	if not test_table.get(title):
+		test_count += 1
+		test_table[title] = {'id':None,'status':None}
+		test_table[title]['id'] 	= test_count
+	test_table[title]['status']	= status
 
 def sprintf_timestamped(message):
 	timestamped_string = ''

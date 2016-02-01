@@ -490,7 +490,7 @@ def shareKeys(tuples):
 def setupClusters(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting clusters inside VM %s" % vm_name								, {'style': 'DEBUG'} )
+		message ( "Setting clusters inside VM %s" % vm_name								, {'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		if vm.ssh_self():
 			if vm.is_clusternode():
@@ -498,7 +498,7 @@ def setupClusters(tuples):
 				time.sleep(5) # Let clustering settle down
 				message ( "Config-Write_Output = %s " % vm.config_write()			, {'style': 'TRACE','to_trace':'1'} )
 			else:
-				message ( "Nothing to do in %s" %vm_name							, {'style': 'TRACE','to_trace':'1'} )
+				message ( "Nothing to do in %s" %vm_name							, {'style': 'INFO'} )
 		else:
 			message ( "SSH capability on %s not working." % vm_name					, {'style': 'DEBUG'} )
 			terminate_self("Exiting")
@@ -508,7 +508,7 @@ def setupClusters(tuples):
 def setupStorage(tuples):
 	for line in tuples:
 		host,vm_name = line.split(":")
-		message ( "Now setting up storage inside VM %s" % vm_name					,{'style': 'DEBUG'} )
+		message ( "Setting up storage inside VM %s" % vm_name					,{'style': 'DEBUG'} )
 		vm = config['HOSTS'][host][vm_name]['vm_ref']
 		try:
 			if vm.ssh_self():
@@ -787,6 +787,7 @@ if __name__ == '__main__':
 		if 'manufacture' in install_type:
 			if not opt_reconfig:
 				do_manufacture(hosts)
+				pass
 			else :
 				record_status("Manufacturing with ISO",get_rc_skipped())
 
