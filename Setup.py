@@ -522,7 +522,7 @@ def setupStorage(tuples):
 					message ( "Gmountd Configuration in %s = \t%s" % (vm_name,vm.mount_storage())		,{'style': 'INFO'} )
 					message ( "Config-Write_Output in %s = %s" % (vm_name,vm.config_write())			,{'style': 'TRACE','to_trace':'1'} )
 				else:
-					message ( "No storage configured for node %s" % vm_name							,{'style': 'DEBUG'} )
+					message ( "No storage configured for node %s" % vm_name							,{'style': 'INFO'} )
 		except Exception,err:
 			message ( "SSH capability on %s not working. %s" % (vm_name,str(err))					,{'style': 'DEBUG'} )
 			terminate_self("Exiting")
