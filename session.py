@@ -7,10 +7,13 @@ import socket
 import commands
 import os,sys
 import random
+import logging
+from logging.handlers import MemoryHandler
 from configobj import ConfigObj,flatten_errors
 from validate import Validator
-from Toolkit import message , terminate_self
+from Toolkit import *
 
+__all__ = ['executeCli','executePmx','executeShell','executeCliasUser','executeShellasUser',]
 
 class session(object):
 	#    re_newlines = re.compile(r'[\n|\r]', re.UNICODE + re.I + re.M)
@@ -35,14 +38,21 @@ class session(object):
 		self.newline 				= "\n"
 		self.current_send_string	= ''
 		if host and username and password:
-			self.connect()
-		message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+			try:
+				self.connect()
+				message ( "session init for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'OK'}  )
+			except Exception, e:
+				message ( "session init FAILED for host %s@%s %s" % (self._username,self._host,str(e)),{'to_trace': '1' ,'style': 'NOK'}  )
+				raise
 	@property
 	
 	def __del__(self):
-		if self.session != None:
-			message ( "session del for host %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
-			self.session.close()
+		try:
+			if self.session:
+				message ( "session del for  %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				self.session.close()
+		except Exception, err:
+			message ( "error deleting session del for %s@%s " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 
 	def _cmd_fix_input_data(self, input_data):
 		if input_data is not None:
@@ -67,48 +77,73 @@ class session(object):
 			ret.append(new_line)
 		return ret
 
-	def checkFileExist(self,filenameFullPath):
-		command = '[ -f %s ] && echo "File exists" || echo "File does not exists"'%filenameFullPath
-		output= self.executeShell(command).split("\n")[-1]
-		if output == "File exists":
-			trace.info("File '%s' exists"%filenameFullPath)
-			return True
-		else:
-			trace.trace("File '%s' doesn't exists"%filenameFullPath)
-		return False
+	def _read(self):
+		data = ""
+		got_data = False
+		timeOut = 120
+		while timeOut > 0 :
+			if self.chan.recv_ready():
+				data = unicode(self.chan.recv(4096), errors='ignore')
+				got_data = True
+				break
+			else:
+				time.sleep(0.5)
+				timeOut = timeOut - 1
+		try:
+			if got_data:
+				return data
+		except Exception:
+			message ( "Unable to read from channel" ,{'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}) 
+			return False
+	
+	def _read_all(self):
+		data = ""
+		while self.chan.recv_ready():
+			data += unicode(self.chan.recv(4096), errors='ignore')
+		return data
 
 	def connect(self):
 		""" Connect to the host at the IP address specified."""
 		retry = 5
-		self.session = paramiko.SSHClient()
-		self.session.load_host_keys(os.path.expanduser("/dev/null"))
-		#self.session.load_system_host_keys()
-		self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		while retry > 0:
 			try:
-				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False)
+				self.session = paramiko.SSHClient()
+				self.session.load_host_keys(os.path.expanduser("/dev/null"))
+				#self.session.load_system_host_keys()
+				self.session.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+				message ( "making coonection on host %s@%s" % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				self.session.connect(self._host, username=self._username, password=self._password, allow_agent=False, look_for_keys=False,timeout=60,banner_timeout=60)
 				message ( "connect on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.transport = self.session.get_transport()
 				self.transport.set_keepalive(5)
-				message ( "transport on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "transport on host %s@%s ok" % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				#self.transport.set_keepalive(15)
 				self.chan = self.session.invoke_shell()
 				message ( "shell invoke on host %s@%s ok " % (self._username,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 				self.chan.settimeout(1200)
 				self.chan.set_combine_stderr(True)
+				self.chan.send_ready()
 				return
-			except socket.error, (value):
-				message ( "SSH Connection refused, will retry in 5 seconds", { 'style': 'DEBUG' } )
-				time.sleep(5)
+			except (paramiko.SSHException, EOFError, AttributeError):
+				message ( "SSH shell invoke refused, will retry in 10 seconds", { 'style': 'DEBUG' } )
+				time.sleep(10)
 				retry -= 1
+			except socket.error, (value):
+				message ( "SSH Connection refused, will retry in 10 seconds", { 'style': 'DEBUG' } )
+				time.sleep(10)
+				retry -= 1
+			except	paramiko.AuthenticationException:
+				message ( 'Incorrect password %s for %s in %s'%(self._username,self._password,self._host), {'style': 'TRACE'} ) 
+				terminate_self("Exiting")
 			except paramiko.BadHostKeyException:
 				message ( "%s has an entry in ~/.ssh/known_hosts and it doesn't match" % self._host, { 'style': 'FATAL' } ) 
 				message ( 'Edit  ~/.ssh/known_hosts file to remove the entry and try again', {'style': 'TRACE'} ) 
 				terminate_self("Exiting")
-			except EOFError:
-				message ( 'Unexpected Error from SSH Connection, retrying in 5 seconds', { 'style': 'DEBUG' } ) 
+			except Exception,err:
+				message ( 'Unexpected Error %s from SSH Connection, retrying in 5 seconds'%str(err), { 'style': 'DEBUG' } ) 
 				time.sleep(5)
 				retry -= 1
+		return False
 
 	def close(self):
 		self.chan.close()
@@ -124,28 +159,30 @@ class session(object):
 		message ( "executeCli| prompt=> %s| cmd=> %s| host=> %s|" % (prompt,cmd,self._host),{'to_trace': '1' ,'style': 'TRACE'}  )
 		if prompt == "cli":
 			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "shell":
 			self.run_till_prompt("cli -m config",self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd,self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit",self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "en":
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_cliPrompt,wait,timeout)
-			return output
-		#Todo Raise exception"
-		message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'}) 
-
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
+		
 	def executePmx(self,cmd,wait=1,timeout=60):
 		output = ''
 		prompt = self.getPrompt()
@@ -154,22 +191,26 @@ class session(object):
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "shell":
 			output = self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("exit", self.re_shellPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "pmx":
 			output = self.run_till_prompt(cmd, self.re_pmxPrompt,wait=1)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt,wait=1)
 			output += self.run_till_prompt("configure terminal", self.re_cliPrompt,wait=1)
 			output += self.run_till_prompt("pmx", self.re_pmxPrompt,wait=1)
 			output += self.run_till_prompt(cmd, self.re_pmxPrompt,wait,timeout)
 			output += self.run_till_prompt("quit", self.re_cliPrompt,wait=1)
-			return output
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
 
 	def executeShell(self,cmd,wait=1,timeout=300):
 		output = ''
@@ -179,21 +220,25 @@ class session(object):
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
-			return output
+			pass
 		elif prompt == "shell":
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "pmx":
 			output += self.run_till_prompt("quit", self.re_cliPrompt)
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
-			return output
+			pass
 		elif prompt == "login":
 			output += self.run_till_prompt("en", self.re_enPrompt)
 			output += self.run_till_prompt("_shell", self.re_shellPrompt)
 			output += self.run_till_prompt(cmd, self.re_shellPrompt,wait,timeout)
 			output += self.run_till_prompt("cli -m config", self.re_cliPrompt)
-			return output
+			pass
+		else:#Todo Raise exception"
+			message ( "Was not able to run command %s on prompt=> %s on Host %s" % (cmd,prompt,self._host),{'style': 'FATAL'})
+		message ( "host %s| prompt=> %s |cmd=> %s|output=>[%s] " % (self._host,cmd,prompt,output),{'to_trace': '1' ,'style': 'TRACE'})
+		return output
 
 	def executeShellasUser(self,user,cmd,wait=1,timeout=180):
 		# su - reflex -c "cli -m config <<< 'conf wr'"  
@@ -303,28 +348,32 @@ class session(object):
 		prompt = False
 		while not prompt and retry > 0 :
 			retry = retry - 1
-			while timeOut > 0:
-				self.write("")
-				buff = self.read()
-				if buff is not None:
-					lines = buff.splitlines()
-				else:
-					continue
-				if len(lines) > 0:
-					buff = lines[-1]
-					if buff and not buff.isspace():   # the string is non-empty
-						got_prompt = True
-						break
+			try:
+				while timeOut > 0:
+					self.write("")
+					buff = self._read()
+					if buff is not None:
+						lines = buff.splitlines()
+					else:
+						continue
+					if len(lines) > 0:
+						buff = lines[-1]
+						if buff and not buff.isspace():   # the string is non-empty
+							got_prompt = True
+							break
+						else :
+							timeOut = timeOut - 1
 					else :
 						timeOut = timeOut - 1
+				if got_prompt:
+					prompt = self.tellPrompt(buff)
 				else :
-					timeOut = timeOut - 1
-			if got_prompt:
-				prompt = self.tellPrompt(buff)
-			else :
-				message ( "Cannot to decide the Prompt. Buffer = %s ... %s retries left " %(buff,retry), {'to_log':1 , 'style': 'DEBUG'} ) 
+					message ( "Cannot to decide the Prompt. Buffer = %s ... %s retries left " %(buff,retry), {'to_log':1 , 'style': 'DEBUG'} ) 
+			except Exception, err:
+				message ( "Giving another chance to guess Prompt.", {'style': 'DEBUG'} ) 
 		if not prompt :
-			message ( "Giving up on getting Prompt.", {'to_log':1 , 'style': 'DEBUG'} ) 
+			message ( "Giving up on finding Prompt.", {'to_log':1 , 'style': 'DEBUG'} )
+			terminate_self("Giving up on finding Prompt.")
 		return prompt   
 
 
@@ -332,8 +381,8 @@ class session(object):
 		data = ''
 		output = ''
 		lastline = ''
+		alerted = None
 		cmds = self._cmd_fix_input_data(cmd)
-		
 		message ( "sending=>\"%s\" on %s" %( cmd,self._host),{'to_trace':1, 'to_log':0 , 'style': 'TRACE'})
 
 		for lines in cmds:
@@ -378,59 +427,38 @@ class session(object):
 					if prompt in lastline:
 						break
 			else :
-				message ( "Prompt not responding, sending newline char",{'to_stdout':1, 'to_log':0 , 'style': 'TRACE'}) 	
+				if not alerted:
+					message ( "Prompt not responding in %s for %s"%(self._host,cmd),{'to_stdout':0, 'to_log':1 , 'style': 'TRACE'})
+					alerted = 1
+				else :
+					message ( "sending newline again",{'to_trace':1, 'style': 'TRACE'})
 				self.write("")
 		output.lstrip()
 		return output
 
-	def read(self):
-		data = ""
-		got_data = False
-		timeOut = 120
-		while timeOut > 0 :
-			if self.chan.recv_ready():
-				data = unicode(self.chan.recv(4096), errors='ignore')
-				got_data = True
-				break
-			else:
-				time.sleep(0.5)
-				timeOut = timeOut - 1
-		try:
-			if got_data:
-				return data
-		except Exception:
-			message ( "Unable to read from channel" ,{'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}) 
-			return False
-
-	def read_all(self):
-		data = ""
-		while self.chan.recv_ready():
-			data += unicode(self.chan.recv(4096), errors='ignore')
-		return data
-
 	def tellPrompt(self,line):
 		try:
 			if self.getshellPrompt(line):
-				message ( "In shell prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In shell prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "shell"
 			elif self.getcliPrompt(line):
-				message ( "In cli prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In cli prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "cli"
 			elif self.getenPrompt(line):
-				message ( "In en prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In en prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "en"
 			elif self.getLoginPrompt(line):
-				message ( "In login prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In login prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "login"
 			elif line.find("pm extension>") != -1:
-				message ( "In pmx prompt %s" % self._host,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "In pmx prompt %s" % self._host,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return "pmx"
 			else:
-				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': '1' ,'style': 'TRACE'}  )
+				message ( "tellPrompt returned None. line = %s " % line ,{'to_trace': 1 ,'style': 'TRACE'}  )
 				return False
-		except Exception:
+		except Exception, err:
 			errorMsg = "Error: %s" % traceback.format_exc()
-			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': '1' ,'style': 'TRACE'}  )
+			message ( "in tellPrompt = %s " % errorMsg,{'to_trace': 1 ,'style': 'TRACE'}  )
 			terminate_self("Something bad happened with guessing current prompt. Exiting. see traces.")
 			return None
 
@@ -458,18 +486,18 @@ class session(object):
 				md2 = md5.new(remote_file_data).digest()
 				if md1 == md2:
 					is_up_to_date = True
-					message ( "UNCHANGED %s" % os.path.basename(fname),  {'style': 'debug'}  )
+					message ( "UNCHANGED %s" % os.path.basename(fname),  {'style': 'DEBUG'}  )
 					sftp.chmod (remote_file,perm)
 					return
 				else:
-					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'info'}  )
-		except:
-			message ( "NEW %s" % os.path.basename(fname),  {'style': 'info'}  )
+					message ( "MODIFIED %s" % os.path.basename(fname),  {'style': 'INFO'}  )
+		except Exception:
+			message ( "NEW %s" % os.path.basename(fname),  {'style': 'INFO'}  )
 
 		if not is_up_to_date:
 			sftp.put(local_file, remote_file)
 			sftp.chmod (remote_file,perm)
-			message ( "Copied file  %s to %s" % (local_file,remote_file),  {'style': 'debug'}  )
+			message ( "Copied file  %s to %s" % (local_file,remote_file),  {'style': 'DEBUG'}  )
 			#except :
 			#	message ( "Cannot copy file %s from % to %s" % (fname,dir_local,dir_remote),  {'style': 'nok'}  )
 
@@ -480,27 +508,23 @@ class session(object):
 		timeOut = 60
 		sent_data = False
 		while timeOut > 0 :
-			if self.chan.send_ready():
-				self.current_send_string = cmd	
-				self.chan.send(cmd + self.newline )
-				sent_data = True
-				break
-			else:
-				time.sleep(0.5)
-				timeOut = timeOut - 1
-		try:
-			if sent_data:
-				return True
-		except Exception:
-			message ( "Unable to write cmd %s to Channel (Channel not Ready)"%cmd,
-					 {'to_stdout':1, 'to_log':1 , 'style': 'FATAL'}
-					 ) 
-			return False
-
-
-
+			try:
+				if self.chan.send_ready():
+					self.current_send_string = cmd	
+					self.chan.send(cmd + self.newline )
+					sent_data = True
+					break
+				else:
+					time.sleep(0.5)
+					timeOut = timeOut - 1
+				if sent_data:
+					return True
+			except Exception:
+				message ( "Unable to write cmd %s to Channel (Channel not Ready)"%cmd,{'style': 'FATAL'}) 
+				return False
 
 if __name__ == '__main__':
-	ssh_session = session('192.168.173.211', username='admin', password='admin@123')
+	ssh_session = session('192.168.172.211', username='admin', password='admin@123')
 	prompt = ssh_session.getPrompt()
+	print prompt
 	

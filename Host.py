@@ -2,7 +2,7 @@
 import re
 from session import session
 from vm_node import vm_node
-from Toolkit import message,terminate_self,get_nightly
+from Toolkit import *
 from os.path import basename
 
 ######################################################
@@ -42,10 +42,11 @@ class Host(object):
 	
 	def create_template(self):
 		output = ''
+		response = ''
 		manufacture_cmd = '/sbin/manufacture.sh -i -v -f /mnt/cdrom/image.img -a -m 1D -d /dev/vda'
 		template_name = basename(self._template_file)
 		iso_path = self.get_iso_path()
-		message ( "Making template from iso_path = %s " % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
+		message ( "Making template from iso_path = %s" % iso_path,{'to_trace': '1' ,'style': 'INFO'}  )
 		iso_name = basename(iso_path)
 		try:
 			output +=  self._ssh_session.executeCli('_exec qemu-img create %s %sG' % (self._template_file,self._template_disk_size))
@@ -58,43 +59,62 @@ class Host(object):
 			output +=  self._ssh_session.run_till_prompt('PS1="my_PROMPT"', "my_PROMPT",wait=1)
 			message ( "Invoking manufacture.sh inside vm-node as %s"%(manufacture_cmd) ,{ 'style': 'OK'}  )
 			output +=  self._ssh_session.run_till_prompt("sed -i 's/^TMPFS_SIZE_MB=[0-9]*/TMPFS_SIZE_MB=12288/g' /etc/customer_rootflop.sh ","my_PROMPT",wait=1)
-			output +=  self._ssh_session.run_till_prompt(manufacture_cmd,"my_PROMPT",wait=60)
-			output +=  self._ssh_session.run_till_prompt('reboot')
+			response =  self._ssh_session.run_till_prompt(manufacture_cmd,"my_PROMPT",wait=60)
+			output += response
+			message ( "Manufacturing Log for %s \n %s" % (self._name,output),{'style': 'INFO'}  )
+			if response.find('Manufacture done.') != -1:
+				output +=  self._ssh_session.run_till_prompt('reboot')
+				return record_status("Manufacturing with ISO",get_rc_ok())
+			else:
+				return record_status("Manufacturing with ISO",get_rc_nok())
 		except Exception:
-			message ( "Template creation failed  %s " % self._name,{'style': 'FATAL'}  )
-			output = output + " Failed "
-		return output
+			message ( "New Template creation failed in %s " % self._name,{'style': 'FATAL'}  )
+			return record_status("Manufacturing with ISO", get_rc_error())
+		return get_rc_error()
 
 	def deleteVMs(self):
 		output = ''
-		try:
-			for vm_name in self._vms:
-				output +=  self._ssh_session.executeCli('no virt vm %s' % vm_name )
-			output = str ( output ) + " Success"
-		except Exception:
-			message ( "Cannot delete vms  %s " % output,{'to_trace': '1' ,'style': 'FATAL'}  )
-			output = output + " Failed"
-		return output
+		response = ''
+		my_return_status = get_rc_skipped()
+		for vm_name in self._vms:	
+			try:
+				response = self._ssh_session.executeCli('show virt vm %s' % vm_name)
+				if response.find('not found') != -1:
+					message ( "VM %s not present. Deletion skipped in %s." % (vm_name,self._name) ,{'style': 'OK'}  )
+				else:
+					output = self._ssh_session.executeCli('no virt vm %s' % vm_name)
+					if output.isspace() or output.find("deleted") != -1:
+						message ( "%s deleted in %s " % (vm_name,self._name) ,{'style': 'OK'}  )
+						my_return_status = get_rc_ok()
+					else:
+						message ( "%s deletion in %s " % (vm_name,self._name) ,{'style': 'NOK'}  )
+						my_return_status = get_rc_nok()
+			except Exception,err:
+				message ( "Cannot delete VM %s in %s = %s %s" %(vm_name,self._name,output,str(err)),{'to_trace': '1' ,'style': 'FATAL'}  )
+				my_return_status = get_rc_error()
+		return my_return_status
 	
 	def declareVMs(self):
 		for vm_name in self._vms:
 			vm = vm_node(self.config,self._name,vm_name)
 			self.config['HOSTS'][self._name][vm_name]['vm_ref'] = vm
-		return "Success"
+		return get_rc_ok()
 
 	def delete_template(self):
 		output = ''
 		response = self._ssh_session.executeCli('virt vm template install cancel')
 		output += response
-		if response.find("No installation in progress on VM") != -1 :
-			message ("Similar installation was already Running on host %s."% self.getname(), {'style':'WARNING'})
-			output += self._ssh_session.executeCli('no virt vm template ')
-			message ("Older installation stopped on host %s."% self.getname(), {'style':'OK'})
-			output = str(output) + " Success"
-		else :
-			message ("No Template installation in progess", {'style':'OK'})
-			output = str(output) + " Success"
-		return output
+		try:
+			if response.find("No installation in progress") != -1 :
+				message ("No Template installation in progess", {'style':'OK'})
+				return get_rc_ok()
+			else :
+				message ("Similar installation already Running on host %s."% self.getname(), {'style':'WARNING'})
+				output += self._ssh_session.executeCli('no virt vm template')
+				message ("Older installation stopped on host %s."% self.getname(), {'style':'INFO'})
+				return get_rc_ok()
+		except Exception,err:
+			return get_rc_error()
 
 	def enableVirt(self):
 		output = ''
@@ -102,7 +122,7 @@ class Host(object):
 		virt_status = self._ssh_session.executeCli('internal query get - /virt/config/enable',wait=1)
 		if virt_status.find("true") != -1:
 			message ("Virtualisation already enabled", {'style':'OK'})
-			return "Success"
+			return get_rc_ok()
 
 		else :
 			message ("Enabling Virtualisation", {'style':'INFO'})
@@ -111,7 +131,7 @@ class Host(object):
 			output += virt_status
 			if virt_status.find("true") != -1:
 				message ("Virtualisation enabled now", {'style':'OK'})
-				return "Success"
+				return get_rc_ok()
 			else :
 				message ("Cannot enable virtualisation	", {'style':'FAIL'})
 				return "FAILED"
@@ -147,7 +167,7 @@ class Host(object):
 				message ("Reason %s" % response,{'style':'DEBUG'})
 				terminate_self("Exiting.")
 			else :
-				output += response[-80:] + "Success"
+				output += response[-80:] + get_rc_ok()
 		except Exception :
 			message ("Unable to fetch url %s in host %s"% (centos_template_path,self.getname()),{'style':'NOK'})
 			terminate_self("Exiting.") 
@@ -167,15 +187,16 @@ class Host(object):
 			message ("Fetching latest version of %s " %(iso_name),{'style':'INFO'})
 			response =  self._ssh_session.executeCli('virt volume fetch url %s' % iso_path,wait=2 )
 			if "failed" in response:
-				message ("Unable to fetch url %s on host %s"% (iso_path,self.getname()),{'style':'NOK'})
+				message ("Unable to fetch url %s on host %s"% (iso_path,self.getname()),{'style':'FATAL'})
 				message ("Reason %s" % response,{'style':'DEBUG'})
 				terminate_self("Exiting.")
+				return get_rc_nok()
 			else :
-				output += response[-80:] + "Success"
+				return get_rc_ok()
 		except Exception :
 			message ("Unable to fetch url %s in host %s"% (iso_path,self.getname()),{'style':'NOK'})
 			terminate_self("Exiting.") 
-		return output
+		return get_rc_ok()
 	
 	def get_common(self):
 		commons = {}	
@@ -226,10 +247,10 @@ class Host(object):
 	def instantiateVMs(self):
 		for vm_name in self._vms:
 			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "Clone-Volume_Output	= [%s]" % vm.clone_volume()		, {'style': 'INFO'} )
-			message ( "VM-Configure_Output	= [%s]" % vm.configure()		, {'style': 'INFO'} )
-			message ( "VM-SetMfgDB_Output	= [%s]" % vm.set_mfgdb()		, {'style': 'INFO'} )
-		return "Success"
+			message ( "Cloning template to %s Vdisk	 = \t[%s]"% (vm_name,vm.clone_volume())	, {'style': 'INFO'} )
+			message ( "VM Configuration in %s config DB = \t[%s]"% (vm_name,vm.configure())	, {'style': 'INFO'} )
+			message ( "MFG DB Configuration in %s = \t\t[%s]" 	% (vm_name,vm.set_mfgdb())		, {'style': 'INFO'} )
+		return get_rc_ok()
 
 	def instantiate_centos_VMs(self):
 		for vm_name in self._vms:
@@ -237,7 +258,7 @@ class Host(object):
 			message ( "Clone-Volume_Output	= [%s]" % vm.clone_volume()		, {'style': 'INFO'} )
 			message ( "VM-Configure_Output	= [%s]" % vm.configure()		, {'style': 'INFO'} )
 			message ( "VM-SetMfgDB_Output	= [%s]" % vm.set_centos_db()	, {'style': 'INFO'} )
-		return "Success"
+		return get_rc_ok()
 			
 	def synctime(self):
 		output = ''
@@ -245,24 +266,27 @@ class Host(object):
 		output += self._ssh_session.executeCli('ntp server %s' % self._ntp_server )
 		output += self._ssh_session.executeCli('ntp enable ')
 		if output.find("adjust") != -1 :
-			output += " Success"
+			return get_rc_ok()
 		else:
-			output += " Fail"
-		return output
+			return get_rc_nok()
 
 	def setDNS(self):
 		output = ''
 		try:
 			output += self._ssh_session.executeCli('ip name-server %s '%self._name_server)
-			output = output + " Success"
 		except Exception:
 			message ( "Cannot set dns server on %s " % self._host,{ 'style': 'WARNING'}  )
-		return output
+			return get_rc_nok()
+		return get_rc_ok()
 	
 	def startVMs(self):
 		for vm_name in self._vms:
-			vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
-			message ( "VM-Poweron = [%s]" % vm.power_on()					, {'style': 'INFO'} )
+			try:
+				vm = self.config['HOSTS'][self._name][vm_name]['vm_ref']
+				message ( "Powering on %s = [%s]" % (vm_name,vm.power_on())		, {'style': 'INFO'} )
+			except Exception :
+				return get_rc_error()
+		return get_rc_ok()
 
 	def upgradeVMs(self):
 		for vm_name in self._vms:
@@ -275,10 +299,16 @@ class Host(object):
 	def vmHostMaps(self):
 		output = ''
 		output += self._ssh_session.executeCli('ssh client global host-key-check no' )
-		for vm_name in self._vms:
-			vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
-			output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
-		return output + "Success"
+		try:
+			for vm_name in self._vms:
+				vm_mgmt_ip = self.config['HOSTS'][self._name][vm_name]['mgmt_ip']
+				output += self._ssh_session.executeCli('ip host %s %s' % (vm_name,vm_mgmt_ip) )
+		except Exception:
+			return get_rc_error()
+		if output.find('%') != -1:
+			return get_rc_nok()
+		else:
+			return get_rc_ok()
 
 	def wipe_setup(self):
 		output = ''
@@ -288,9 +318,10 @@ class Host(object):
 		cmd += "rm -rf /data/virt/pools/default/*.tgz \n"
 		output +=  self._ssh_session.executeShell(cmd)
 		if output.find("cannot") != -1:
-			return output + "Fail"
+			message ( "Wiping Setup failed [%s]" % output			, {'style': 'INFO'} )
+			return get_rc_nok()
 		else:
-			return output + "Success"
+			return get_rc_ok()
 
 if __name__ == '__main__':
     pass
